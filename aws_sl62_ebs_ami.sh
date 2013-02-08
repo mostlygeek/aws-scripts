@@ -287,6 +287,7 @@ EOF
 chmod 755 /etc/init.d/ec2-get-ssh
 chkconfig --level 34 ec2-get-ssh on
 
+# This doesn't seem to be working as I would expect. More testing is needed.
 echo "   CHROOT - Configuring cloud init"
 mv /etc/cloud/cloud.cfg{,.orig}
 cat > /etc/cloud/cloud.cfg <<'EOF'
