@@ -4,31 +4,35 @@
 function usage(){
 
     cat <<"EOF"
-    Usage is: $0 -d <device> -i <directory for image>
+    Usage is: $0 -d <device> -i <directory for image> -v <version>
     Where:
     -d  = Device to be used in /dev/<devicename> format (ex. /dev/sdb)
+    -h  = Help (this message)
     -i  = Directory where the specified device's first partition will be mouted (ex. /mnt/image)
+    -v  = Version to be installed (6.[2|3] are the only valid options)
 
-    This program assumes that the drive is partitioned like so:
-    /dev/<device>1 = /
-    /dev/<device>2 = swap
+    The specified device will be partitioned as below:
+    /dev/<device>1 = /    (18 GB)
+    /dev/<device>2 = swap (2  GB)
+    
+    / will be formatted as ext4
 
-    No other configuration will work properly.
 EOF
+exit
 
 }
 
 function install_prereqs(){
 
-    yum -y -q -e0 install e2fsprogs unzip MAKEDEV
+    yum -e0 -q -y install e2fsprogs unzip MAKEDEV > /dev/null 2>&1
 
 }
 
 
 function main(){
 
-    test -z "$DEVICE" && { echo "DEVICE is not set. Exiting"; exit; }
-    test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting"; exit; }
+    test -z "$DEVICE" && { echo "DEVICE is not set. Exiting"; usage; }
+    test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting"; usage; }
     install_prereqs
     drive_prep
     stage1_install
@@ -49,10 +53,13 @@ function create_partitions(){
 
 function make_filesystems() {
     
-   [ -b ${DEVICE}1 ] && \
-       mke2fs -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}1 || \
-         { echo "${DEVICE}1 not found"; exit} }
-   mkswap -L exb-swap ${DEVICES}2
+   if [ -b ${DEVICE}1 ]; then
+       mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}1
+   else
+       echo "${DEVICE}1 not found"
+       exit
+   fi
+   mkswap -L ebs-swap ${DEVICES}2
 
 }
 
@@ -85,7 +92,7 @@ function stage1_install() {
 
     # Build enough of an env that all the steps in stage2 will run as expected in a chroot
 
-rpm -ivh --root=${IMGLOC}/ --nodeps  http://ftp.scientificlinux.org/linux/scientific/6.2/x86_64/os/Packages/sl-release-6.2-1.1.x86_64.rpm
+rpm -i --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.2/x86_64/os/Packages/sl-release-6.2-1.1.x86_64.rpm
 
 cat > ${IMGLOC}/etc/yum.conf <<'EOF'
 [main]
@@ -103,8 +110,8 @@ distroverpkg=sl-release
 EOF
 
 echo "Installing base packages for chroot"
-yum -e0 -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} install -y rpm-build yum openssh-server dhclient
-yum -e0 -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} install -y http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
+yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient
+yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
 
 cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
 DEVICE=eth0
@@ -148,20 +155,18 @@ echo "Creating stage2 script"
 cat > ${IMGLOC}/root/stage2.sh <<'STAGE2EOF'
 
 echo "   CHROOT - Installing base and core"
-yum -e0 -y -q groupinstall base core
+yum -e 0 -q -y groupinstall base core
 echo "   CHROOT - Installing supplemental packages"
-yum -e0 -y install -q --enablerepo=puppetlabs-products,puppetlabs-deps \
-java-1.6.0-openjdk epel-release rpmforge-release automake dhclient \
-e2fsprogs gcc git grub iotop libcgroup ltrace mailx nc net-snmp \
-nss-pam-ldapd ntp wget epel-release rpmforge-release ruby rubygems \
-screen strace sudo svn tuned tuned-utils vim-enhanced yum-utils zsh \
-puppet-2.7.13 augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby \
-libselinux-python *openssh* yum-plugin-fastestmirror.noarch python-cheetah \
-python-configobj python-pip python-virtualenv supervisor \
-yum-plugin-fastestmirror
+yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
+java-1.6.0-openjdk epel-release rpmforge-release automake gcc git iotop \
+libcgroup ltrace nc net-snmp nss-pam-ldapd epel-release rpmforge-release \
+ruby rubygems screen svn tuned tuned-utils zsh puppet-2.7.13 augeas-libs \
+facter ruby-augeas ruby-shadow libselinux-ruby libselinux-python \
+yum-plugin-fastestmirror.noarch python-cheetah python-configobj python-pip \
+python-virtualenv supervisor yum-plugin-fastestmirror
+
 echo "   CHROOT - Installing cloud init"
-yum -e0 -y -q --disablerepo=* --enablerepo=epel install libyaml PyYAML cloud-init python-boto
-rpm -Uvh http://www.bashton.com/downloads/centos-ami/RPMS/noarch/ec2-utils-0.2-1.5bashton1.el6.noarch.rpm
+yum -e0 -q -y --disablerepo=* --enablerepo=epel install libyaml PyYAML cloud-init python-boto
 
 echo "   CHROOT - Installing API/AMI tools"
 mkdir -p /opt/ec2/tools
@@ -188,7 +193,7 @@ function do_header() {
 printf "default=0\ntimeout=1\n" >> /boot/grub/menu.lst
 }
 
-function do_entry(){g
+function do_entry(){
 KERN=$1
 VER=${KERN#/boot/vmlinuz-}
 printf "\n\ntitle Scientific Linux ($VER)
@@ -291,23 +296,38 @@ chkconfig --level 34 ec2-get-ssh on
 echo "   CHROOT - Configuring cloud init"
 mv /etc/cloud/cloud.cfg{,.orig}
 cat > /etc/cloud/cloud.cfg <<'EOF'
-ssh_pwauth:   0
-cc_ready_cmd: ['/bin/true']
-locale_configfile: /etc/sysconfig/i18n
-mount_default_fields: [~, ~, 'auto', 'defaults,nofail', '0', '2']
-mounts:
- - [ ephemeral0, /media/ephemeral0, auto, "defaults" ]
- - [ swap, none, swap, sw, "0", "0" ]
+#cloud-config
 preserve_hostname: True
-repo_upgrade: sl-security
+
+cc_ready_cmd: ['/bin/true']
+
+locale_configfile: /etc/sysconfig/i18n
+
+mount_default_fields: [~, ~, 'auto', 'defaults,nofail', '0', '2']
+
+repo_upgrade:     sl-security
+
+ssh_pwauth:       0
 ssh_deletekeys:   0
 ssh_genkeytypes:  ~
 ssh_svcname:      sshd
 syslog_fix_perms: ~
 
+mounts:
+ - [ LABEL=ROOT,/,ext4,"defaults,relatime" ]
+ - [ ephemeral0, /media/ephemeral0, auto, "defaults,noexec,nosuid,nodev" ]
+ - [ swap, none, swap, sw, "0", "0" ]
+
+bootcmd:
+ - ec2metadata --instance-id > /etc/hostname
+ - hostname -b -F /etc/hostname
+ - echo "127.0.1.1 `cat /etc/hostname`" >> /etc/hosts
+
+runcmd:
+ - if ec2metadata | grep instance-id > /dev/null; then ec2metadata --instance-id > /etc/hostname; echo 127.0.0.1 `cat /etc/hostname` >> /etc/hosts; hostname -b -F /etc/hostname; service rsyslog restart; fi
+
 cloud_init_modules:
  - bootcmd
- - resizefs
  - set_hostname
  - rsyslog
  - ssh
@@ -337,10 +357,10 @@ EOF
 sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux
 
 echo "   CHROOT - Updating kernel tools"
-yum -e0 --enablerepo=sl-fastbugs -y install dracut dracut-kernel module-init-tools
+yum -e0 -q -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools
 
-echo "   CHROOT - Removing firmware"
-rpm -e --nodeps *-firmware
+echo "   CHROOT - Removing unneeded firmware"
+yum -e0 -y -q remove *-firmware
 yum -e0 -y -q install kernel-firmware
 
 exit
@@ -380,10 +400,10 @@ function unmount() {
     for i in /{dev{/shm,/pts,},sys,proc,}
     do
         umount ${IMGLOC}${i}
+        sleep 1
     done
     echo "Unmounting ${IMGLOC}"
     umount ${IMGLOC}
-
 }
 
 if [ $EUID != 0 ]; then
@@ -393,17 +413,17 @@ fi
 
 IMGLOC=
 DEVICE=
-while getopts :d:i:v: ARGS; do
+VERSION=
+while getopts :d:hi:v: ARGS; do
     case $ARGS in
         d)
             if [ -L /sys/block/${OPTARG#/dev/} ]; then
                 DEVICE=$OPTARG
             else
                 echo "$OPTARG is an invalid device"
-                exit
+                usage
             fi
             ;;
-
         i)
             if [ -d $OPTARG ]; then
                 CHECK=$( mount  | grep -E "$OPTARG " )
@@ -421,10 +441,39 @@ while getopts :d:i:v: ARGS; do
                 fi
             fi
             ;;
-
-        *)
+        h)
             usage
-            exit
+            ;;
+        v)
+            formatcheck=$(echo $OPTARG | fgrep '.')
+            if [ -n "$formatcheck" ]; then
+                major=$(echo $OPTARG | cut -d. -f1)
+                minor=$(echo $OPTARG | cut -d. -f2)
+                if [[ $major == 6 ]]; then
+                    case $minor in
+                    2)
+                        VERSION=62
+                        ;;
+                    3)
+                        VERSION=63
+                        ;;
+                    *)
+                        echo "Unsupported Version!"
+                        usage
+                        ;;
+                    esac
+                 else
+                     echo "Unsupported Version!"
+                     usage
+                 fi
+             else
+                 echo "Unsupported Version"
+                 usage
+             fi
+             ;;
+        \?)
+            echo "Invalid option!"
+            usage
             ;;
     esac
 done
