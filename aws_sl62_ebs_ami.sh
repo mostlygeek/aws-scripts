@@ -2,6 +2,9 @@
 
 
 function usage(){
+    if [ -d $IMGLOC/dev ]; then
+        unmount
+    fi
 
     cat <<"EOF"
     Usage is: $0 -d <device> -i <directory for image> -v <version>
@@ -33,12 +36,14 @@ function main(){
 
     test -z "$DEVICE" && { echo "DEVICE is not set. Exiting"; usage; }
     test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting"; usage; }
+    test -z "$VERSION" && { echo "VERSION is not set. Exiting"; usage; }
+    version_check
     install_prereqs
     drive_prep
     stage1_install
     stage2_install
     final_drive_prep
-    umount
+    unmount
 
 }
 
@@ -59,7 +64,7 @@ function make_filesystems() {
        echo "${DEVICE}1 not found"
        exit
    fi
-   mkswap -L ebs-swap ${DEVICES}2
+   mkswap -L ebs-swap ${DEVICE}2
 
 }
 
@@ -78,7 +83,7 @@ function drive_prep(){
         done
         for i in /{dev{,/pts,/shm},proc,sys}
         do
-            echo mount -o bind $i ${IMGLOC}$i
+            mount -o bind $i ${IMGLOC}$i
         done
     else
         echo "Problem mounting device $DEVICE... Bailing out"
@@ -90,9 +95,7 @@ function drive_prep(){
 
 function stage1_install() {
 
-    # Build enough of an env that all the steps in stage2 will run as expected in a chroot
-
-rpm -i --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.2/x86_64/os/Packages/sl-release-6.2-1.1.x86_64.rpm
+# Build enough of an env that all the steps in stage2 will run as expected in a chroot
 
 cat > ${IMGLOC}/etc/yum.conf <<'EOF'
 [main]
@@ -108,11 +111,6 @@ installonly_limit=3
 multilib_policy=best
 distroverpkg=sl-release
 EOF
-
-echo "Installing base packages for chroot"
-yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient
-yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
-
 cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
 DEVICE=eth0
 BOOTPROTO=dhcp
@@ -141,7 +139,7 @@ cp  /etc/resolv.conf ${IMGLOC}/etc/resolv.conf
 
 # Be aware, this will not work for instance store AMI's
 cat > ${IMGLOC}/etc/fstab <<'EOF'
-/dev/xvde1     /         ext3    defaults,noatime  1    1
+/dev/xvde1     /         ext4    defaults,noatime  1    1
 tmpfs          /dev/shm  tmpfs   defaults          0    0
 devpts         /dev/pts  devpts  gid=5,mode=620    0    0
 sysfs          /sys      sysfs   defaults          0    0
@@ -149,6 +147,20 @@ proc           /proc     proc    defaults          0    0
 LABEL=ebs-swap none      swap    sw                0    0
 
 EOF
+
+
+version_check
+echo $RELEASERPM | grep rpm
+if [ $? -eq 1 ]; then
+    echo "Bad version passed"
+    usage
+else
+    $RELEASERPM
+fi
+
+echo "Installing base packages for chroot"
+yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient
+yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
 
 # Create the shell script that will run in stage2 chroot
 echo "Creating stage2 script"
@@ -396,16 +408,32 @@ function final_drive_prep() {
 
 function unmount() {
 
-    echo "Unmounting ${DEVICE} from ${IMGLOC}"
+    echo "Unmounting ${DEVICE}"
     for i in /{dev{/shm,/pts,},sys,proc,}
     do
         umount ${IMGLOC}${i}
         sleep 1
     done
-    echo "Unmounting ${IMGLOC}"
-    umount ${IMGLOC}
+    
 }
 
+function version_check() {
+    
+    case $VERSION in
+    62)
+        RELEASERPM="rpm -i --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.2/x86_64/os/Packages/sl-release-6.2-1.1.x86_64.rpm"
+        ;;
+    63) 
+        RELEASERPM="rpm -ivh --root=/mnt/sl63-image --nodeps http://ftp.scientificlinux.org/linux/scientific/6.3/x86_64/os/Packages/sl-release-6.3-1.x86_64.rpm"
+        ;;
+    *)
+        echo "foo"
+        ;;
+    esac
+    export RELEASERPM
+}
+       
+   
 if [ $EUID != 0 ]; then
     echo "*** ERROR - You must run this script as root"
     exit
@@ -466,11 +494,11 @@ while getopts :d:hi:v: ARGS; do
                      echo "Unsupported Version!"
                      usage
                  fi
-             else
+            else
                  echo "Unsupported Version"
                  usage
-             fi
-             ;;
+            fi
+            ;;
         \?)
             echo "Invalid option!"
             usage
