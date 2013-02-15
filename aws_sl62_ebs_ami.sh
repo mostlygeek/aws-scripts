@@ -2,8 +2,10 @@
 
 
 function usage(){
-    if [ -d $IMGLOC/dev ]; then
-        unmount
+    if [ -n "$IMGLOC" ]; then
+        if [ -d $IMGLOC/dev ]; then
+            unmount
+        fi
     fi
 
     cat <<"EOF"
@@ -50,8 +52,8 @@ function main(){
 function create_partitions(){
 
     parted $DEVICE --script mklabel msdos
-    parted $DEVICE --script -- unit GB mkpart primary ext4 1 18
-    parted $DEVICE --script -- unit GB mkpart primary ext4 18 -1
+    parted $DEVICE --script -- unit GB mkpart primary ext4 0 18
+    parted $DEVICE --script -- unit GB mkpartfs primary linux-swap 18 -1
     parted $DEVICE --script -- set 1 boot
 
 }
@@ -96,6 +98,18 @@ function drive_prep(){
 function stage1_install() {
 
 # Build enough of an env that all the steps in stage2 will run as expected in a chroot
+echo "Installing base packages for chroot"
+
+# Need to know which version of the OS we're installing
+echo $RELEASERPM | grep rpm
+if [ $? -eq 1 ]; then
+    echo "Bad version passed"
+    usage
+else
+    $RELEASERPM
+fi
+
+# Need this first, so the yum commands below work
 
 cat > ${IMGLOC}/etc/yum.conf <<'EOF'
 [main]
@@ -111,6 +125,14 @@ installonly_limit=3
 multilib_policy=best
 distroverpkg=sl-release
 EOF
+
+# Installs most of base
+yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient
+
+# Installs puppet yum repos and keys
+yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
+
+# Overwrite exiting files (installed as deps in the commands above)
 cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
 DEVICE=eth0
 BOOTPROTO=dhcp
@@ -147,20 +169,6 @@ proc           /proc     proc    defaults          0    0
 LABEL=ebs-swap none      swap    sw                0    0
 
 EOF
-
-
-version_check
-echo $RELEASERPM | grep rpm
-if [ $? -eq 1 ]; then
-    echo "Bad version passed"
-    usage
-else
-    $RELEASERPM
-fi
-
-echo "Installing base packages for chroot"
-yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient
-yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
 
 # Create the shell script that will run in stage2 chroot
 echo "Creating stage2 script"
@@ -306,7 +314,7 @@ chkconfig --level 34 ec2-get-ssh on
 
 # This doesn't seem to be working as I would expect. More testing is needed.
 echo "   CHROOT - Configuring cloud init"
-mv /etc/cloud/cloud.cfg{,.orig}
+mv /etc/cloud/cloud.cfg /root/cloud.cfg.orig
 cat > /etc/cloud/cloud.cfg <<'EOF'
 #cloud-config
 preserve_hostname: True
