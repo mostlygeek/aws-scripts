@@ -52,8 +52,8 @@ function main(){
 function create_partitions(){
 
     parted $DEVICE --script mklabel msdos
-    parted $DEVICE --script -- unit GB mkpart primary ext4 0 18
-    parted $DEVICE --script -- unit GB mkpartfs primary linux-swap 18 -1
+    parted -a optimal $DEVICE --script -- unit GB mkpart primary ext4 0 18
+    parted -a optimal $DEVICE --script -- unit GB mkpart primary linux-swap 18 -1
     parted $DEVICE --script -- set 1 boot
 
 }
@@ -176,6 +176,7 @@ cat > ${IMGLOC}/root/stage2.sh <<'STAGE2EOF'
 
 echo "   CHROOT - Installing base and core"
 yum -e 0 -q -y groupinstall base core
+
 echo "   CHROOT - Installing supplemental packages"
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release rpmforge-release automake gcc git iotop \
@@ -190,17 +191,19 @@ yum -e0 -q -y --disablerepo=* --enablerepo=epel install libyaml PyYAML cloud-ini
 
 echo "   CHROOT - Installing API/AMI tools"
 mkdir -p /opt/ec2/tools
-curl -o /tmp/ec2-api-tools.zip http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip
+curl -s -o /tmp/ec2-api-tools.zip http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip
 unzip -qq /tmp/ec2-api-tools.zip -d /tmp
 cp -r /tmp/ec2-api-tools-*/* /opt/ec2/tools
-curl -o /tmp/ec2-ami-tools.zip http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip
+curl -s -o /tmp/ec2-ami-tools.zip http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip
 unzip -qq /tmp/ec2-ami-tools.zip -d /tmp
 cp -r /tmp/ec2-ami-tools-*/* /opt/ec2/tools
 rm -rf /tmp/ec2-a*
-wget -O /opt/ec2/tools/bin/ec2-metadata http://s3.amazonaws.com/ec2metadata/ec2-metadata
+
+wget --output-document=/opt/ec2/tools/bin/ec2-metadata http://s3.amazonaws.com/ec2metadata/ec2-metadata
+chmod 755 /opt/ec2/tools/bin/ec2-metadata
 
 # Create profile configs for java and aws
-printf "export EC2_HOME=/opt/ec2/tools\nexport PATH=$PATH:$EC2_HOME/bin\n" >> /etc/profile.d/aws.sh
+print 'export EC2_HOME=/opt/ec2/tools\nexport PATH=$PATH:$EC2_HOME/bin\n' >> /etc/profile.d/aws.sh
 printf "export JAVA_HOME=/usr" >> /etc/profile.d/java.sh
 
 cat > /root/mkgrub.sh <<'EOF'
@@ -317,7 +320,7 @@ echo "   CHROOT - Configuring cloud init"
 mv /etc/cloud/cloud.cfg /root/cloud.cfg.orig
 cat > /etc/cloud/cloud.cfg <<'EOF'
 #cloud-config
-preserve_hostname: True
+preserve_hostname: False
 
 cc_ready_cmd: ['/bin/true']
 
@@ -374,14 +377,41 @@ cloud_final_modules:
 # vim:syntax=yaml
 EOF
 
+echo "   CHROOT - disable selinux and create rpm macros"
 sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux
+echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
 echo "   CHROOT - Updating kernel tools"
 yum -e0 -q -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools
 
 echo "   CHROOT - Removing unneeded firmware"
 yum -e0 -y -q remove *-firmware
+# *hack*
 yum -e0 -y -q install kernel-firmware
+
+echo "   CHROOT - installing yum-autoupdates config"
+cat > /etc/sysconfig/yum-autoupdate << 'EOF'
+ENABLED="true"
+SENDEMAIL="true"
+SENDONLYERRORS="false"
+MAILLIST="root"
+MAXWAITTIME=180
+CONFIGFILE="/etc/yum.conf"
+EXCLUDE="kernel* openafs* *-kmdl-* kmod-* *firmware*"
+PRERUN=""
+ADDONRUN=""
+POSTRUN=""
+USE_YUMSEC="true"
+DEBUG="false"
+EOF
+
+echo "    CHROOT - Setting ktune profile to virtual-guest"
+chkconfig --level 235 tuned on
+chkconfig --level 235 ktune on
+sed -i -e s/,vd}/,vd,xvd}/ /etc/tune-profiles/virtual-guest/ktune.sysconfig
+service tuned start
+tuned-adm profile virtual-guest
+service tuned stop
 
 exit
 STAGE2EOF
@@ -407,6 +437,7 @@ function final_drive_prep() {
     mkswap -L ebs-swap ${DEVICE}2
     echo "Cleaning up"
     yum -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages
+    rm -rf ${IMGLOC}/root/mkgrub.sh
     rm -rf ${IMGLOC}/root/.bash_history
     rm -rf ${IMGLOC}/var/cache/yum
     rm -rf ${IMGLOC}/var/lib/yum
