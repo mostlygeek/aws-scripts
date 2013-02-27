@@ -62,6 +62,7 @@ function make_filesystems() {
     
    if [ -b ${DEVICE}1 ]; then
        mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}1
+       tune2fs -c 0 ${DEVICE}1
    else
        echo "${DEVICE}1 not found"
        exit
@@ -199,11 +200,11 @@ unzip -qq /tmp/ec2-ami-tools.zip -d /tmp
 cp -r /tmp/ec2-ami-tools-*/* /opt/ec2/tools
 rm -rf /tmp/ec2-a*
 
-wget --output-document=/opt/ec2/tools/bin/ec2-metadata http://s3.amazonaws.com/ec2metadata/ec2-metadata
+wget --quiet --output-document=/opt/ec2/tools/bin/ec2-metadata http://s3.amazonaws.com/ec2metadata/ec2-metadata
 chmod 755 /opt/ec2/tools/bin/ec2-metadata
 
 # Create profile configs for java and aws
-print 'export EC2_HOME=/opt/ec2/tools\nexport PATH=$PATH:$EC2_HOME/bin\n' >> /etc/profile.d/aws.sh
+printf 'export EC2_HOME=/opt/ec2/tools\nexport PATH=$PATH:$EC2_HOME/bin\n' >> /etc/profile.d/aws.sh
 printf "export JAVA_HOME=/usr" >> /etc/profile.d/java.sh
 
 cat > /root/mkgrub.sh <<'EOF'
@@ -320,7 +321,8 @@ echo "   CHROOT - Configuring cloud init"
 mv /etc/cloud/cloud.cfg /root/cloud.cfg.orig
 cat > /etc/cloud/cloud.cfg <<'EOF'
 #cloud-config
-preserve_hostname: False
+preserve_hostname: True
+cloud_type: auto
 
 cc_ready_cmd: ['/bin/true']
 
@@ -342,12 +344,12 @@ mounts:
  - [ swap, none, swap, sw, "0", "0" ]
 
 bootcmd:
- - ec2metadata --instance-id > /etc/hostname
+ - ec2-metadata --instance-id > /etc/hostname
  - hostname -b -F /etc/hostname
  - echo "127.0.1.1 `cat /etc/hostname`" >> /etc/hosts
 
 runcmd:
- - if ec2metadata | grep instance-id > /dev/null; then ec2metadata --instance-id > /etc/hostname; echo 127.0.0.1 `cat /etc/hostname` >> /etc/hosts; hostname -b -F /etc/hostname; service rsyslog restart; fi
+ - if ec2-metadata | grep instance-id > /dev/null; then ec2-metadata --instance-id > /etc/hostname; echo 127.0.0.1 `cat /etc/hostname` >> /etc/hosts; hostname -b -F /etc/hostname; service rsyslog restart; fi
 
 cloud_init_modules:
  - bootcmd
@@ -409,9 +411,9 @@ echo "    CHROOT - Setting ktune profile to virtual-guest"
 chkconfig --level 235 tuned on
 chkconfig --level 235 ktune on
 sed -i -e s/,vd}/,vd,xvd}/ /etc/tune-profiles/virtual-guest/ktune.sysconfig
-service tuned start
-tuned-adm profile virtual-guest
-service tuned stop
+mv /etc/tune-profiles/default{,.orig}
+ln -sf /etc/tune-profiles/virtual-guest /etc/tune-profiles/default
+
 
 exit
 STAGE2EOF
