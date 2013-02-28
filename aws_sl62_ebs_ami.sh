@@ -98,7 +98,8 @@ function stage1_install() {
 echo "Installing base packages for chroot" >&2
 
 # Need to know which version of the OS we're installing
-if echo $RELEASERPM | grep rpm; then
+echo $RELEASERPM | grep -q rpm
+if [ $? -eq 1 ]; then
     echo "Bad version passed" >&2
     usage
 else
@@ -465,7 +466,7 @@ function version_check() {
     export RELEASERPM
 }
        
-   
+trap unmount 1 9 15   
 if [ $EUID != 0 ]; then
     echo "*** ERROR - You must run this script as root" >&2
     exit
@@ -507,7 +508,7 @@ while getopts :d:hi:v: ARGS; do
             usage
             ;;
         v)
-            if echo $OPTARG | fgrep '.'; then
+            if $(echo $OPTARG | fgrep '.'); then
                 major=$(echo $OPTARG | cut -d. -f1)
                 minor=$(echo $OPTARG | cut -d. -f2)
                 if [[ $major == 6 ]]; then
