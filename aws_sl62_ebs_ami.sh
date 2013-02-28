@@ -508,7 +508,8 @@ while getopts :d:hi:v: ARGS; do
             usage
             ;;
         v)
-            if $(echo $OPTARG | fgrep '.'); then
+            VALIDVERSION=$(echo $OPTARG | grep -o "[0-9]\.[0-9]")
+            if [ -n "$VALIDVERSION" ]; then
                 major=$(echo $OPTARG | cut -d. -f1)
                 minor=$(echo $OPTARG | cut -d. -f2)
                 if [[ $major == 6 ]]; then
