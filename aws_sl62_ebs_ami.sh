@@ -2,13 +2,13 @@
 
 
 function usage(){
-    if [ -n "$IMGLOC" ]; then
-        if [ -d $IMGLOC/dev ]; then
-            unmount
+    if test -n "$IMGLOC"; then
+        if mount | grep $IMGLOC; then
+            unmount > /dev/null 2>&1
         fi
     fi
 
-    cat <<"EOF"
+    cat <<"EOF" >&2
     Usage is: $0 -d <device> -i <directory for image> -v <version>
     Where:
     -d  = Device to be used in /dev/<devicename> format (ex. /dev/sdb)
@@ -36,15 +36,12 @@ function install_prereqs(){
 
 function main(){
 
-    test -z "$DEVICE" && { echo "DEVICE is not set. Exiting"; usage; }
-    test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting"; usage; }
-    test -z "$VERSION" && { echo "VERSION is not set. Exiting"; usage; }
     version_check
     install_prereqs
     drive_prep
     stage1_install
     stage2_install
-    final_drive_prep
+    cleanup
     unmount
 
 }
@@ -60,14 +57,14 @@ function create_partitions(){
 
 function make_filesystems() {
     
-   if [ -b ${DEVICE}1 ]; then
-       mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}1
-       tune2fs -c 0 ${DEVICE}1
+   if test -b ${DEVICE}1; then
+       mke2fs -q -t ext4 -L / -O extent -O sparse_super ${DEVICE}1
+       tune2fs -c 0 ${DEVICE}1 > /dev/null 2>&1
    else
-       echo "${DEVICE}1 not found"
+       echo "${DEVICE}1 not found" >&2
        exit
    fi
-   mkswap -L ebs-swap ${DEVICE}2
+   mkswap -L ebs-swap ${DEVICE}2 > /dev/null 2>&1
 
 }
 
@@ -75,9 +72,8 @@ function drive_prep(){
     
     create_partitions
     make_filesystems
-    mount ${DEVICE}1 $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume."; exit; }
-    ISMOUNTED=$(mount | grep -q ${IMGLOC}; echo $?)
-    if [[ "$ISMOUNTED" -eq "0" ]]; then
+    mount ${DEVICE}1 $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
+    if mount | grep -q ${IMGLOC}; then
         mkdir -p $IMGLOC/{dev,etc,proc,sys}
         mkdir -p $IMGLOC/var/{cache,log,lock,lib/rpm}
         for i in console null zero urandom
@@ -89,7 +85,7 @@ function drive_prep(){
             mount -o bind $i ${IMGLOC}$i
         done
     else
-        echo "Problem mounting device $DEVICE... Bailing out"
+        echo "Problem mounting device $DEVICE... Bailing out" >&2
         exit
     fi
     rpm --rebuilddb --root=${IMGLOC}
@@ -99,12 +95,11 @@ function drive_prep(){
 function stage1_install() {
 
 # Build enough of an env that all the steps in stage2 will run as expected in a chroot
-echo "Installing base packages for chroot"
+echo "Installing base packages for chroot" >&2
 
 # Need to know which version of the OS we're installing
-echo $RELEASERPM | grep rpm
-if [ $? -eq 1 ]; then
-    echo "Bad version passed"
+if echo $RELEASERPM | grep rpm; then
+    echo "Bad version passed" >&2
     usage
 else
     $RELEASERPM
@@ -184,8 +179,8 @@ java-1.6.0-openjdk epel-release rpmforge-release automake gcc git iotop \
 libcgroup ltrace nc net-snmp nss-pam-ldapd epel-release rpmforge-release \
 ruby rubygems screen svn tuned tuned-utils zsh puppet-2.7.13 augeas-libs \
 facter ruby-augeas ruby-shadow libselinux-ruby libselinux-python \
-yum-plugin-fastestmirror.noarch python-cheetah python-configobj python-pip \
-python-virtualenv supervisor yum-plugin-fastestmirror
+yum-plugin-fastestmirror python-cheetah python-configobj python-pip \
+python-virtualenv supervisor yum-conf-sl-other
 
 echo "   CHROOT - Installing cloud init"
 yum -e0 -q -y --disablerepo=* --enablerepo=epel install libyaml PyYAML cloud-init python-boto
@@ -380,7 +375,7 @@ cloud_final_modules:
 EOF
 
 echo "   CHROOT - disable selinux and create rpm macros"
-sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux
+sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux > /dev/null 2>&1
 echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
 echo "   CHROOT - Updating kernel tools"
@@ -430,16 +425,12 @@ function stage2_install() {
 
 }
 
-function final_drive_prep() {
+function cleanup() {
 
-    echo "Setting drive parameters"
-    tune2fs -c 0 ${DEVICE}1
-    tune2fs -L / ${DEVICE}1
-    echo "Creating swap volume"
-    mkswap -L ebs-swap ${DEVICE}2
     echo "Cleaning up"
     yum -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages
     rm -rf ${IMGLOC}/root/mkgrub.sh
+    rm -rf ${IMGLOC}/root/stage2.sh
     rm -rf ${IMGLOC}/root/.bash_history
     rm -rf ${IMGLOC}/var/cache/yum
     rm -rf ${IMGLOC}/var/lib/yum
@@ -476,7 +467,7 @@ function version_check() {
        
    
 if [ $EUID != 0 ]; then
-    echo "*** ERROR - You must run this script as root"
+    echo "*** ERROR - You must run this script as root" >&2
     exit
 fi
 
@@ -486,18 +477,17 @@ VERSION=
 while getopts :d:hi:v: ARGS; do
     case $ARGS in
         d)
-            if [ -L /sys/block/${OPTARG#/dev/} ]; then
+            if  test -L /sys/block/${OPTARG#/dev/}; then
                 DEVICE=$OPTARG
             else
-                echo "$OPTARG is an invalid device"
+                echo "$OPTARG is an invalid device" >&2
                 usage
             fi
             ;;
         i)
             if [ -d $OPTARG ]; then
-                CHECK=$( mount  | grep -E "$OPTARG " )
-                if [ -n "$CHECK" ]; then
-                    echo "Error $OPTARG is already mounted"
+                if mount  | grep -E "$OPTARG "; then
+                    echo "Error $OPTARG is already mounted" >&2
                     exit
                 else
                     IMGLOC=$OPTARG
@@ -505,8 +495,11 @@ while getopts :d:hi:v: ARGS; do
             else
                 read -e -N 1 -p "$OPTARG doesn't exist. Would you like me to create it? (y/n)" CREATE
                 if [[ "$CREATE" == "y|Y" ]]; then
-                    mkdir -p $OPTARG || { echo "Could not create $OPTARG. Fix this and try again"; exit; }
+                    mkdir -p $OPTARG || { echo "Could not create $OPTARG. Fix this and try again" >&2; exit; }
                     IMGLOC=$OPTARG
+                else
+                    echo "Could not parse your response. Bailing out." >&2
+                    exit;
                 fi
             fi
             ;;
@@ -514,8 +507,7 @@ while getopts :d:hi:v: ARGS; do
             usage
             ;;
         v)
-            formatcheck=$(echo $OPTARG | fgrep '.')
-            if [ -n "$formatcheck" ]; then
+            if echo $OPTARG | fgrep '.'; then
                 major=$(echo $OPTARG | cut -d. -f1)
                 minor=$(echo $OPTARG | cut -d. -f2)
                 if [[ $major == 6 ]]; then
@@ -527,23 +519,26 @@ while getopts :d:hi:v: ARGS; do
                         VERSION=63
                         ;;
                     *)
-                        echo "Unsupported Version!"
+                        echo "Unsupported Version!" >&2
                         usage
                         ;;
                     esac
                  else
-                     echo "Unsupported Version!"
+                     echo "Unsupported Version!" >&2
                      usage
                  fi
             else
-                 echo "Unsupported Version"
+                 echo "Unsupported Version" >&2
                  usage
             fi
             ;;
         \?)
-            echo "Invalid option!"
+            echo "Invalid option!" >&2
             usage
             ;;
     esac
 done
+test -z "$DEVICE" && { echo "DEVICE is not set. Exiting" >&2; usage; }
+test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting" >&2; usage; }
+test -z "$VERSION" && { echo "VERSION is not set. Exiting" >&2; usage; }
 main
