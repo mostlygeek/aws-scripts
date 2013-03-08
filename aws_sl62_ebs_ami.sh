@@ -2,6 +2,7 @@
 
 
 function usage(){
+
     if test -n "$IMGLOC"; then
         if mount | grep $IMGLOC; then
             unmount > /dev/null 2>&1
@@ -94,43 +95,53 @@ function drive_prep(){
 
 function stage1_install() {
 
-# Build enough of an env that all the steps in stage2 will run as expected in a chroot
-echo "Installing base packages for chroot" >&2
+    # Build enough of an env that all the steps in stage2 will run as expected in a chroot
+    echo "Installing base packages for chroot" >&2
 
-# Need to know which version of the OS we're installing
-echo $RELEASERPM | grep -q rpm
-if [ $? -eq 1 ]; then
-    echo "Bad version passed" >&2
-    usage
-else
-    $RELEASERPM
-fi
+    # Need to know which version of the OS we're installing
+    echo $RELEASERPM | grep -q rpm
+    if [ $? -eq 1 ]; then
+        echo "Bad version passed" >&2
+        usage
+    else
+        $RELEASERPM
+    fi
 
-# Need this first, so the yum commands below work
+    # Need this first, so the yum commands below work
 
-cat > ${IMGLOC}/etc/yum.conf <<'EOF'
+    cat > ${IMGLOC}/etc/yum.conf <<'EOF'
 [main]
 cachedir=/var/cache/yum/$basearch/$releasever
-keepcache=0
-debuglevel=2
-logfile=/var/log/yum.log
-exactarch=1
-obsoletes=1
-gpgcheck=1
-plugins=1
-installonly_limit=3
-multilib_policy=best
 distroverpkg=sl-release
+exactarch=1
+gpgcheck=1
+installonly_limit=3
+keepcache=0
+logfile=/var/log/yum.log
+multilib_policy=best
+obsoletes=1
+plugins=1
+tolerant=1
 EOF
 
-# Installs most of base
-yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient
+    # Let's make sure that the fastest mirrors are used for the yum commands
 
-# Installs puppet yum repos and keys
-yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
+    sed -i -e 's,baseurl,\#baseurl,g' -e 's,\#mirrolist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
 
-# Overwrite exiting files (installed as deps in the commands above)
-cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
+    # So at this point the gpg keys are in file:///${IMGLOC}/etc/pki/rpm-gpg but the repo files think they're in
+    # file:///etc/pki/rpm-gpg/RPM-GPG-KEY-sl and because of that, installation will fail until we chroot. Sed that
+    # out so this isn't an issue. We remove this later
+
+    sed -i.bak -e s,file:///etc/pki/rpm-gpg/,file://${IMGLOC}/etc/pki/rpm-gpg/,g ${IMGLOC}/etc/yum.repos.d/sl.repo
+
+    # Installs most of base
+    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient
+
+    # Installs puppet yum repos and keys
+    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
+
+    # Overwrite exiting files (installed as deps in the commands above)
+    cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
 DEVICE=eth0
 BOOTPROTO=dhcp
 ONBOOT=yes
@@ -140,7 +151,7 @@ PEERDNS=yes
 IPV6INIT=no
 EOF
 
-cat > ${IMGLOC}/etc/sysconfig/network <<'EOF'
+    cat > ${IMGLOC}/etc/sysconfig/network <<'EOF'
 NETWORKING=yes
 HOSTNAME=localhost.localdomain
 NOZEROCONF=yes
@@ -153,11 +164,11 @@ IPV6TO4INIT=no
 IPV6_CONTROL_RADVD=no
 EOF
 
-# copies build host's resolv.conf into the image
-cp  /etc/resolv.conf ${IMGLOC}/etc/resolv.conf
+    # copies build host's resolv.conf into the image
+    cp  /etc/resolv.conf ${IMGLOC}/etc/resolv.conf
 
-# Be aware, this will not work for instance store AMI's
-cat > ${IMGLOC}/etc/fstab <<'EOF'
+    # Be aware, this will not work for instance store AMI's
+    cat > ${IMGLOC}/etc/fstab <<'EOF'
 /dev/xvde1     /         ext4    defaults,noatime  1    1
 tmpfs          /dev/shm  tmpfs   defaults          0    0
 devpts         /dev/pts  devpts  gid=5,mode=620    0    0
@@ -167,9 +178,9 @@ LABEL=ebs-swap none      swap    sw                0    0
 
 EOF
 
-# Create the shell script that will run in stage2 chroot
-echo "Creating stage2 script"
-cat > ${IMGLOC}/root/stage2.sh <<'STAGE2EOF'
+    # Create the shell script that will run in stage2 chroot
+    echo "Creating stage2 script"
+    cat > ${IMGLOC}/root/stage2.sh <<'STAGE2EOF'
 
 echo "   CHROOT - Installing base and core"
 yum -e 0 -q -y groupinstall base core
@@ -210,31 +221,27 @@ declare -a INITRDS
 KERNELS=(/boot/vmlinuz*)
 
 function do_header() {
-printf "default=0\ntimeout=1\n" >> /boot/grub/menu.lst
+    printf "default=0\ntimeout=1\n" >> /boot/grub/menu.lst
 }
 
 function do_entry(){
-KERN=$1
-VER=${KERN#/boot/vmlinuz-}
-printf "\n\ntitle Scientific Linux ($VER)
- root (hd0,0)
- kernel $KERN ro root=/dev/xvde1 rootfstype=ext4 rd_NO_PLYMOUTH selinux=0 console=hvc0 \
- loglvl=all sync_console console_to_ring earlyprintk=xen nomodeset rd_NO_FSTAB \
- rd_NO_LUKS rd_NO_LVM rd_NO_MD rd_NO_DM LANG=en_US.UTF-8 \
- SYSFONT=latarcyrheb-sun16 KEYBOARDTYPE=pc KEYTABLE=us crashkernel=auto rhgb \
- max_loop=64 rdinfo biosdevname=0 rdloaddriver=xen_blkfront rdloaddriver=ext4\n \
- initrd /boot/initramfs-${VER}.img\n" >> /boot/grub/menu.lst
-}
-
-function do_close(){
-cat /boot/grub/menu.lst
+    KERN=$1
+    VER=${KERN#/boot/vmlinuz-}
+    printf "\n\ntitle Scientific Linux ($VER)
+     root (hd0,0)
+     kernel $KERN ro root=/dev/xvde1 rootfstype=ext4 rd_NO_PLYMOUTH selinux=0 console=hvc0 \
+     loglvl=all sync_console console_to_ring earlyprintk=xen nomodeset rd_NO_FSTAB \
+     rd_NO_LUKS rd_NO_LVM rd_NO_MD rd_NO_DM LANG=en_US.UTF-8 \
+     SYSFONT=latarcyrheb-sun16 KEYBOARDTYPE=pc KEYTABLE=us crashkernel=auto rhgb \
+     max_loop=64 rdinfo biosdevname=0 rdloaddriver=xen_blkfront rdloaddriver=ext4\n \
+     initrd /boot/initramfs-${VER}.img\n" >> /boot/grub/menu.lst
 }
 
 do_header
 for ((j=0;j<${#KERNELS[@]};j++)); do
     do_entry ${KERNELS[$j]}
 done
-do_close
+
 EOF
 
 echo "   CHROOT - Creating /boot/grub/menu.lst"
@@ -413,22 +420,33 @@ ln -sf /etc/tune-profiles/virtual-guest /etc/tune-profiles/default
 
 exit
 STAGE2EOF
-chmod 700 ${IMGLOC}/root/stage2.sh
+    chmod 700 ${IMGLOC}/root/stage2.sh
 
 }
 
 function stage2_install() {
-    
-# Finally, chroot into the image
-    echo "Entering chroot"
-    chroot ${IMGLOC} su -c /root/stage2.sh
-    echo "Exiting chroot"
+
+    # Undo our repo change from above
+    if grep "$IMGLOC" ${IMGLOC}/etc/yum.repos.d/sl.repo ; then
+      rm ${IMGLOC}/etc/yum.repos.d/sl.repo
+      mv ${IMGLOC}/etc/yum.repos.d/sl.repo.bak ${IMGLOC}/etc/yum.repos.d/sl.repo
+    else
+      # Shouldn't get here, but just in case...
+      echo "Error - default repo file is in a bad state" >&2
+      exit
+    fi
+
+    # Finally, chroot into the image
+        echo "Entering chroot"
+        chroot ${IMGLOC} su -c /root/stage2.sh
+        echo "Exiting chroot"
 
 }
 
 function cleanup() {
 
     echo "Cleaning up"
+    # Remove packages not needed post-installation
     yum -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages
     rm -rf ${IMGLOC}/root/mkgrub.sh
     rm -rf ${IMGLOC}/root/stage2.sh
@@ -466,6 +484,7 @@ function version_check() {
     export RELEASERPM
 }
        
+# Clean-up after ourselves if we're HUP'd, killed, or stopped.
 trap unmount 1 9 15   
 if [ $EUID != 0 ]; then
     echo "*** ERROR - You must run this script as root" >&2
