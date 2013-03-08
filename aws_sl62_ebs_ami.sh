@@ -126,8 +126,8 @@ EOF
 
     # Let's make sure that the fastest mirrors are used for the yum commands
 
-    sed -i -e 's,baseurl,\#baseurl,g' -e 's,\#mirrolist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
-
+    sed -i -e 's,baseurl,#baseurl,g' -e  's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
+    
     # So at this point the gpg keys are in file:///${IMGLOC}/etc/pki/rpm-gpg but the repo files think they're in
     # file:///etc/pki/rpm-gpg/RPM-GPG-KEY-sl and because of that, installation will fail until we chroot. Sed that
     # out so this isn't an issue. We remove this later
