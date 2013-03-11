@@ -183,7 +183,8 @@ EOF
     cat > ${IMGLOC}/root/stage2.sh <<'STAGE2EOF'
 
 echo "   CHROOT - Installing base and core"
-yum -e 0 -q -y groupinstall base core
+
+yum -e 0 -q -y groupinstall Base Core
 
 echo "   CHROOT - Installing supplemental packages"
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
@@ -195,19 +196,22 @@ yum-plugin-fastestmirror python-cheetah python-configobj python-pip \
 python-virtualenv supervisor yum-conf-sl-other
 
 echo "   CHROOT - Installing cloud init"
-yum -e0 -q -y --disablerepo=* --enablerepo=epel install libyaml PyYAML cloud-init python-boto
+yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto
 
 echo "   CHROOT - Installing API/AMI tools"
 mkdir -p /opt/ec2/tools
+
 curl -s -o /tmp/ec2-api-tools.zip http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip
 unzip -qq /tmp/ec2-api-tools.zip -d /tmp
 cp -r /tmp/ec2-api-tools-*/* /opt/ec2/tools
+
 curl -s -o /tmp/ec2-ami-tools.zip http://s3.amazonaws.com/ec2-downloads/ec2-ami-tools.zip
 unzip -qq /tmp/ec2-ami-tools.zip -d /tmp
 cp -r /tmp/ec2-ami-tools-*/* /opt/ec2/tools
+
 rm -rf /tmp/ec2-a*
 
-wget --quiet --output-document=/opt/ec2/tools/bin/ec2-metadata http://s3.amazonaws.com/ec2metadata/ec2-metadata
+curl -s -o /opt/ec2/tools/bin/ec2-metadata http://s3.amazonaws.com/ec2metadata/ec2-metadata
 chmod 755 /opt/ec2/tools/bin/ec2-metadata
 
 # Create profile configs for java and aws
@@ -228,13 +232,13 @@ function do_entry(){
     KERN=$1
     VER=${KERN#/boot/vmlinuz-}
     printf "\n\ntitle Scientific Linux ($VER)
-     root (hd0,0)
-     kernel $KERN ro root=/dev/xvde1 rootfstype=ext4 rd_NO_PLYMOUTH selinux=0 console=hvc0 \
-     loglvl=all sync_console console_to_ring earlyprintk=xen nomodeset rd_NO_FSTAB \
-     rd_NO_LUKS rd_NO_LVM rd_NO_MD rd_NO_DM LANG=en_US.UTF-8 \
-     SYSFONT=latarcyrheb-sun16 KEYBOARDTYPE=pc KEYTABLE=us crashkernel=auto rhgb \
-     max_loop=64 rdinfo biosdevname=0 rdloaddriver=xen_blkfront rdloaddriver=ext4\n \
-     initrd /boot/initramfs-${VER}.img\n" >> /boot/grub/menu.lst
+root (hd0,0)
+kernel $KERN ro root=/dev/xvde1 rootfstype=ext4 rd_NO_PLYMOUTH selinux=0 console=hvc0 \
+loglvl=all sync_console console_to_ring earlyprintk=xen nomodeset rd_NO_FSTAB \
+rd_NO_LUKS rd_NO_LVM rd_NO_MD rd_NO_DM LANG=en_US.UTF-8 \
+SYSFONT=latarcyrheb-sun16 KEYBOARDTYPE=pc KEYTABLE=us crashkernel=auto rhgb \
+max_loop=64 rdinfo biosdevname=0 rdloaddriver=xen_blkfront rdloaddriver=ext4\n \
+initrd /boot/initramfs-${VER}.img\n" >> /boot/grub/menu.lst
 }
 
 do_header
@@ -410,7 +414,7 @@ USE_YUMSEC="true"
 DEBUG="false"
 EOF
 
-echo "    CHROOT - Setting ktune profile to virtual-guest"
+echo "   CHROOT - Setting ktune profile to virtual-guest"
 chkconfig --level 235 tuned on
 chkconfig --level 235 ktune on
 sed -i -e s/,vd}/,vd,xvd}/ /etc/tune-profiles/virtual-guest/ktune.sysconfig
@@ -438,7 +442,7 @@ function stage2_install() {
 
     # Finally, chroot into the image
         echo "Entering chroot"
-        chroot ${IMGLOC} su -c /root/stage2.sh
+        chroot ${IMGLOC} su -c /bin/bash /root/stage2.sh
         echo "Exiting chroot"
 
 }
