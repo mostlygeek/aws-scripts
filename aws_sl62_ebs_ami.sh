@@ -124,10 +124,6 @@ plugins=1
 tolerant=1
 EOF
 
-    # Let's make sure that the fastest mirrors are used for the yum commands
-
-    sed -i -e 's,baseurl,#baseurl,g' -e  's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
-    
     # So at this point the gpg keys are in file:///${IMGLOC}/etc/pki/rpm-gpg but the repo files think they're in
     # file:///etc/pki/rpm-gpg/RPM-GPG-KEY-sl and because of that, installation will fail until we chroot. Sed that
     # out so this isn't an issue. We remove this later
@@ -135,7 +131,7 @@ EOF
     sed -i.bak -e s,file:///etc/pki/rpm-gpg/,file://${IMGLOC}/etc/pki/rpm-gpg/,g ${IMGLOC}/etc/yum.repos.d/sl.repo
 
     # Installs most of base
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient
+    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror
 
     # Installs puppet yum repos and keys
     yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
@@ -178,22 +174,24 @@ LABEL=ebs-swap none      swap    sw                0    0
 
 EOF
 
+    # Let's make sure that the fastest mirrors are used for the yum commands
+
+    sed -i -e 's,baseurl,#baseurl,g' -e  's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
+    
+
     # Create the shell script that will run in stage2 chroot
     echo "Creating stage2 script"
-    cat > ${IMGLOC}/root/stage2.sh <<'STAGE2EOF'
-
+    cat > ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
 echo "   CHROOT - Installing base and core"
-
 yum -e 0 -q -y groupinstall Base Core
 
 echo "   CHROOT - Installing supplemental packages"
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release rpmforge-release automake gcc git iotop \
 libcgroup ltrace nc net-snmp nss-pam-ldapd epel-release rpmforge-release \
-ruby rubygems screen svn tuned tuned-utils vim-minimal zsh \ 
+ruby rubygems screen svn tuned tuned-utils vim-minimal zsh \
 puppet-2.7.13 augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby libselinux-python \
-yum-plugin-fastestmirror python-cheetah python-configobj python-pip \
-python-virtualenv supervisor yum-conf-sl-other
+python-cheetah python-configobj python-pip python-virtualenv supervisor yum-conf-sl-other
 
 echo "   CHROOT - Installing cloud init"
 yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto
@@ -218,7 +216,7 @@ chmod 755 /opt/ec2/tools/bin/ec2-metadata
 printf 'export EC2_HOME=/opt/ec2/tools\nexport PATH=$PATH:$EC2_HOME/bin\n' >> /etc/profile.d/aws.sh
 printf "export JAVA_HOME=/usr" >> /etc/profile.d/java.sh
 
-cat > /root/mkgrub.sh <<'EOF'
+cat > /root/mkgrub.sh << 'EOF'
 #!/bin/bash
 declare -a KERNELS
 declare -a INITRDS
@@ -255,7 +253,7 @@ bash /root/mkgrub.sh
 echo "   CHROOT - Tweaking sshd config"
 printf "UseDNS no\nPermitRootLogin without-password" >> /etc/ssh/sshd_config
 
-cat > /etc/init.d/ec2-get-ssh <<'EOF'
+cat > /etc/init.d/ec2-get-ssh << 'EOF'
 #!/bin/bash
 # chkconfig: 2345 95 20
 # processname: ec2-get-ssh
@@ -326,7 +324,7 @@ chkconfig --level 34 ec2-get-ssh on
 # This doesn't seem to be working as I would expect. More testing is needed.
 echo "   CHROOT - Configuring cloud init"
 mv /etc/cloud/cloud.cfg /root/cloud.cfg.orig
-cat > /etc/cloud/cloud.cfg <<'EOF'
+cat > /etc/cloud/cloud.cfg << 'EOF'
 #cloud-config
 preserve_hostname: True
 cloud_type: auto
@@ -442,8 +440,11 @@ function stage2_install() {
 
     # Finally, chroot into the image
         echo "Entering chroot"
-        chroot ${IMGLOC} su -c /bin/bash /root/stage2.sh
+        CWD=$(pwd)
+        cd ${IMGLOC} && \
+         chroot . /root/stage2.sh
         echo "Exiting chroot"
+        cd ${CWD}
 
 }
 
@@ -489,7 +490,8 @@ function version_check() {
 }
        
 # Clean-up after ourselves if we're HUP'd, killed, or stopped.
-trap unmount 1 9 15   
+trap unmount 1 2 3 6 9 15
+
 if [ $EUID != 0 ]; then
     echo "*** ERROR - You must run this script as root" >&2
     exit
