@@ -480,7 +480,7 @@ function version_check() {
         RELEASERPM="rpm -i --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.2/x86_64/os/Packages/sl-release-6.2-1.1.x86_64.rpm"
         ;;
     63) 
-        RELEASERPM="rpm -ivh --root=/mnt/sl63-image --nodeps http://ftp.scientificlinux.org/linux/scientific/6.3/x86_64/os/Packages/sl-release-6.3-1.x86_64.rpm"
+        RELEASERPM="rpm -ivh --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.3/x86_64/os/Packages/sl-release-6.3-1.x86_64.rpm"
         ;;
     *)
         echo "foo"
@@ -500,7 +500,7 @@ fi
 IMGLOC=
 DEVICE=
 VERSION=
-while getopts :d:hi:v: ARGS; do
+while getopts :d:hi:v:u ARGS; do
     case $ARGS in
         d)
             if  test -L /sys/block/${OPTARG#/dev/}; then
@@ -520,7 +520,7 @@ while getopts :d:hi:v: ARGS; do
                 fi
             else
                 read -e -N 1 -p "$OPTARG doesn't exist. Would you like me to create it? (y/n)" CREATE
-                if [[ "$CREATE" == "y|Y" ]]; then
+                if echo $CREATE | grep -iq y; then
                     mkdir -p $OPTARG || { echo "Could not create $OPTARG. Fix this and try again" >&2; exit; }
                     IMGLOC=$OPTARG
                 else
@@ -559,6 +559,8 @@ while getopts :d:hi:v: ARGS; do
                  usage
             fi
             ;;
+        u)
+            
         \?)
             echo "Invalid option!" >&2
             usage
