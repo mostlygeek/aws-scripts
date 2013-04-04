@@ -559,7 +559,6 @@ while getopts :d:hi:v:u ARGS; do
                  usage
             fi
             ;;
-        u)
             
         \?)
             echo "Invalid option!" >&2
