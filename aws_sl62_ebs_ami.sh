@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-function usage(){
+function usage {
 
     if test -n "$IMGLOC"; then
         if mount | grep $IMGLOC; then
@@ -9,18 +9,18 @@ function usage(){
         fi
     fi
 
-    cat <<"EOF" >&2
+    cat <<EOF >&2
     Usage is: $0 -d <device> -i <directory for image> -v <version>
     Where:
     -d  = Device to be used in /dev/<devicename> format (ex. /dev/sdb)
     -h  = Help (this message)
-    -i  = Directory where the specified device's first partition will be mouted (ex. /mnt/image)
-    -v  = Version to be installed (6.[2|3] are the only valid options)
+    -i  = Directory where the specified device's first partition will be mounted (ex. /mnt/image)
+    -v  = Version to be installed (6.[2|3] are the only valid options at this time)
 
     The specified device will be partitioned as below:
     /dev/<device>1 = /    (18 GB)
     /dev/<device>2 = swap (2  GB)
-    
+
     / will be formatted as ext4
 
 EOF
@@ -28,14 +28,14 @@ exit
 
 }
 
-function install_prereqs(){
+function install_prereqs {
 
     yum -e0 -q -y install e2fsprogs unzip MAKEDEV > /dev/null 2>&1
 
 }
 
 
-function main(){
+function main {
 
     version_check
     install_prereqs
@@ -47,7 +47,7 @@ function main(){
 
 }
 
-function create_partitions(){
+function create_partitions {
 
     parted $DEVICE --script mklabel msdos
     parted -a optimal $DEVICE --script -- unit GB mkpart primary ext4 0 18
@@ -56,8 +56,8 @@ function create_partitions(){
 
 }
 
-function make_filesystems() {
-    
+function make_filesystems {
+
    if test -b ${DEVICE}1; then
        mke2fs -q -t ext4 -L / -O extent -O sparse_super ${DEVICE}1
        tune2fs -c 0 ${DEVICE}1 > /dev/null 2>&1
@@ -69,8 +69,8 @@ function make_filesystems() {
 
 }
 
-function drive_prep(){
-    
+function drive_prep {
+
     create_partitions
     make_filesystems
     mount ${DEVICE}1 $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
@@ -93,7 +93,7 @@ function drive_prep(){
 
 }
 
-function stage1_install() {
+function stage1_install {
 
     # Build enough of an env that all the steps in stage2 will run as expected in a chroot
     echo "Installing base packages for chroot" >&2
@@ -163,7 +163,7 @@ EOF
     # copies build host's resolv.conf into the image
     cp  /etc/resolv.conf ${IMGLOC}/etc/resolv.conf
 
-    # Be aware, this will not work for instance store AMI's
+    # Be aware, this will not work for instance store AMIs
     cat > ${IMGLOC}/etc/fstab <<'EOF'
 /dev/xvde1     /         ext4    defaults,noatime  1    1
 tmpfs          /dev/shm  tmpfs   defaults          0    0
@@ -177,15 +177,15 @@ EOF
     # Let's make sure that the fastest mirrors are used for the yum commands
 
     sed -i -e 's,baseurl,#baseurl,g' -e  's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
-    
+
 
     # Create the shell script that will run in stage2 chroot
-    echo "Creating stage2 script"
+    echo "Creating stage2 script" >&2
     cat > ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
-echo "   CHROOT - Installing base and core"
+echo "   CHROOT - Installing base and core" >&2
 yum -e 0 -q -y groupinstall Base Core
 
-echo "   CHROOT - Installing supplemental packages"
+echo "   CHROOT - Installing supplemental packages" >&2
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release rpmforge-release automake gcc git iotop \
 libcgroup ltrace nc net-snmp nss-pam-ldapd epel-release rpmforge-release \
@@ -193,10 +193,10 @@ ruby rubygems screen svn tuned tuned-utils vim-minimal zsh \
 puppet-2.7.13 augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby libselinux-python \
 python-cheetah python-configobj python-pip python-virtualenv supervisor yum-conf-sl-other
 
-echo "   CHROOT - Installing cloud init"
+echo "   CHROOT - Installing cloud init" >&2
 yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto
 
-echo "   CHROOT - Installing API/AMI tools"
+echo "   CHROOT - Installing API/AMI tools" >&2
 mkdir -p /opt/ec2/tools
 
 curl -s -o /tmp/ec2-api-tools.zip http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip
@@ -222,11 +222,11 @@ declare -a KERNELS
 declare -a INITRDS
 KERNELS=(/boot/vmlinuz*)
 
-function do_header() {
+function do_header {
     printf "default=0\ntimeout=1\n" >> /boot/grub/menu.lst
 }
 
-function do_entry(){
+function do_entry {
     KERN=$1
     VER=${KERN#/boot/vmlinuz-}
     printf "\n\ntitle Scientific Linux ($VER)
@@ -246,11 +246,11 @@ done
 
 EOF
 
-echo "   CHROOT - Creating /boot/grub/menu.lst"
+echo "   CHROOT - Creating /boot/grub/menu.lst" >&2
 
 bash /root/mkgrub.sh
 
-echo "   CHROOT - Tweaking sshd config"
+echo "   CHROOT - Tweaking sshd config" >&2
 printf "UseDNS no\nPermitRootLogin without-password" >> /etc/ssh/sshd_config
 
 cat > /etc/init.d/ec2-get-ssh << 'EOF'
@@ -275,7 +275,7 @@ if [ "${NETWORKING}" = "no" ]; then
   exit 1
 fi
 
-start() {
+function start {
   if [ ! -d /root/.ssh ]; then
     mkdir -p /root/.ssh
     chmod 700 /root/.ssh
@@ -283,18 +283,18 @@ start() {
   # Retrieve public key from metadata server using HTTP
   curl -f http://169.254.169.254/latest/meta-data/public-keys/0/openssh-key > /tmp/my-public-key
   if [ $? -eq 0 ]; then
-    echo "EC2: Retrieve public key from metadata server using HTTP."
+    echo "EC2: Retrieve public key from metadata server using HTTP." >&2
     cat /tmp/my-public-key >> /root/.ssh/authorized_keys
     chmod 600 /root/.ssh/authorized_keys
     rm /tmp/my-public-key
   fi
 }
 
-stop() {
-  echo "Nothing to do here"
+function stop {
+  echo "Nothing to do here" >&2
 }
 
-restart() {
+function restart {
   stop
   start
 }
@@ -321,13 +321,15 @@ EOF
 chmod 755 /etc/init.d/ec2-get-ssh
 chkconfig --level 34 ec2-get-ssh on
 
-# This doesn't seem to be working as I would expect. More testing is needed.
-echo "   CHROOT - Configuring cloud init"
+# This cloud.cfg doesn't seem to be working as I would expect. More testing is needed.
+echo "   CHROOT - Configuring cloud init" >&2
 mv /etc/cloud/cloud.cfg /root/cloud.cfg.orig
 cat > /etc/cloud/cloud.cfg << 'EOF'
 #cloud-config
-preserve_hostname: True
 cloud_type: auto
+user: ec2-user
+disable_root: 1
+preserve_hostname: True
 
 cc_ready_cmd: ['/bin/true']
 
@@ -335,7 +337,9 @@ locale_configfile: /etc/sysconfig/i18n
 
 mount_default_fields: [~, ~, 'auto', 'defaults,nofail', '0', '2']
 
-repo_upgrade:     sl-security
+repo_upgrade: sl-security
+repo_upgrade_exclude:
+ - kernel*
 
 ssh_pwauth:       0
 ssh_deletekeys:   0
@@ -384,19 +388,19 @@ cloud_final_modules:
 # vim:syntax=yaml
 EOF
 
-echo "   CHROOT - disable selinux and create rpm macros"
+echo "   CHROOT - disable selinux and create rpm macros" >&2
 sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux > /dev/null 2>&1
 echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
-echo "   CHROOT - Updating kernel tools"
+echo "   CHROOT - Updating kernel tools" >&2
 yum -e0 -q -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools
 
-echo "   CHROOT - Removing unneeded firmware"
+echo "   CHROOT - Removing unneeded firmware" >&2
 yum -e0 -y -q remove *-firmware
 # *hack*
 yum -e0 -y -q install kernel-firmware
 
-echo "   CHROOT - installing yum-autoupdates config"
+echo "   CHROOT - installing yum-autoupdates config" >&2
 cat > /etc/sysconfig/yum-autoupdate << 'EOF'
 ENABLED="true"
 SENDEMAIL="true"
@@ -412,7 +416,7 @@ USE_YUMSEC="true"
 DEBUG="false"
 EOF
 
-echo "   CHROOT - Setting ktune profile to virtual-guest"
+echo "   CHROOT - Setting ktune profile to virtual-guest" >&2
 chkconfig --level 235 tuned on
 chkconfig --level 235 ktune on
 sed -i -e s/,vd}/,vd,xvd}/ /etc/tune-profiles/virtual-guest/ktune.sysconfig
@@ -426,7 +430,7 @@ STAGE2EOF
 
 }
 
-function stage2_install() {
+function stage2_install {
 
     # Undo our repo change from above
     if grep "$IMGLOC" ${IMGLOC}/etc/yum.repos.d/sl.repo ; then
@@ -439,11 +443,11 @@ function stage2_install() {
     fi
 
     # Finally, chroot into the image
-        echo "Entering chroot"
+        echo "Entering chroot" >&2
         CWD=$(pwd)
         cd ${IMGLOC} && \
          chroot . /root/stage2.sh
-        echo "Exiting chroot"
+        echo "Exiting chroot" >&2
         cd ${CWD}
 
 }
@@ -462,7 +466,7 @@ function cleanup() {
 
 }
 
-function unmount() {
+function unmount {
 
     echo "Unmounting ${DEVICE}"
     for i in /{dev{/shm,/pts,},sys,proc,}
@@ -470,16 +474,16 @@ function unmount() {
         umount ${IMGLOC}${i}
         sleep 1
     done
-    
+
 }
 
-function version_check() {
-    
+function version_check {
+
     case $VERSION in
     62)
         RELEASERPM="rpm -i --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.2/x86_64/os/Packages/sl-release-6.2-1.1.x86_64.rpm"
         ;;
-    63) 
+    63)
         RELEASERPM="rpm -ivh --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.3/x86_64/os/Packages/sl-release-6.3-1.x86_64.rpm"
         ;;
     *)
@@ -488,7 +492,7 @@ function version_check() {
     esac
     export RELEASERPM
 }
-       
+
 # Clean-up after ourselves if we're HUP'd, killed, or stopped.
 trap unmount 1 2 3 6 9 15
 
@@ -559,7 +563,7 @@ while getopts :d:hi:v:u ARGS; do
                  usage
             fi
             ;;
-            
+
         \?)
             echo "Invalid option!" >&2
             usage
