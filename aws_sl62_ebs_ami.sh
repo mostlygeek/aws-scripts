@@ -61,6 +61,7 @@ function make_filesystems {
    if test -b ${DEVICE}1; then
        mke2fs -q -t ext4 -L / -O extent -O sparse_super ${DEVICE}1
        tune2fs -c 0 ${DEVICE}1 > /dev/null 2>&1
+       tune2fs -L ROOT ${DEVICE}1
    else
        echo "${DEVICE}1 not found" >&2
        exit
