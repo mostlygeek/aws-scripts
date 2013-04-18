@@ -195,7 +195,7 @@ puppet-2.7.13 augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby libseli
 python-cheetah python-configobj python-pip python-virtualenv supervisor yum-conf-sl-other
 
 echo "   CHROOT - Installing cloud init" >&2
-yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto
+yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd
 
 echo "   CHROOT - Installing API/AMI tools" >&2
 mkdir -p /opt/ec2/tools
