@@ -182,7 +182,7 @@ EOF
 
     # Let's make sure that the fastest mirrors are used for the yum commands
 
-    sed -i -e 's,baseurl,#baseurl,g' -e  's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
+    sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
 
 
     # Create the shell script that will run in stage2 chroot
@@ -485,7 +485,7 @@ STAGE2EOF
 function stage2_install {
 
     # Undo our repo change from above
-    if grep "$IMGLOC" ${IMGLOC}/etc/yum.repos.d/sl.repo ; then
+    if grep -q "$IMGLOC" ${IMGLOC}/etc/yum.repos.d/sl.repo ; then
       rm ${IMGLOC}/etc/yum.repos.d/sl.repo
       mv ${IMGLOC}/etc/yum.repos.d/sl.repo.bak ${IMGLOC}/etc/yum.repos.d/sl.repo
     else
