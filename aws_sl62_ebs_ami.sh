@@ -433,7 +433,50 @@ sed -i -e '/^#\ \%wheel.*NOPASSWD/s,^#,,;' /etc/sudoers
 useradd -d /home/ec2-user -G wheel -k /etc/skel -m -s /bin/bash -U ec2-user
 passwd -l ec2-user
 
+echo "   CHROOT - Creating AWS/Cloud Init fiddly bits" >&2
+
+# The following makes sure that the xvd* => sd* mapping stays in place on a 
+# non Amazon Linux host. Thanks to mostlygeek for figuring this out.
+
+cat > /sbin/ec2udev << 'EOF'
+
+# Maintain consistent naming scheme with current EC2 instances
+if [ "$#" -ne 1 ] ; then
+  echo "$0 <device>" >&2
+  exit 1
+else
+  if echo "$1"|grep -qE 'xvd[a-z][0-9]?' ; then
+    echo "$1" | sed -e 's/xvd/sd/'
+  else
+    echo "$1"
+  fi
+fi
+
 exit
+EOF
+chmod 755 /sbin/ec2udev
+
+cat > /etc/udev/rules.d/51-ec2-hvm-devices.rules << 'EOF'
+ 
+# Copyright (C) 2006-2012 Amazon.com, Inc. or its affiliates.
+# All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+# You may not use this file except in compliance with the License.
+# A copy of the License is located at
+#
+#    http://aws.amazon.com/apache2.0/
+#
+# or in the "license" file accompanying this file. This file is
+# distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+# OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the
+# License.
+ 
+KERNEL=="xvd*", PROGRAM="/sbin/ec2udev %k", SYMLINK+="%c"
+
+EOF
+
 STAGE2EOF
     chmod 700 ${IMGLOC}/root/stage2.sh
 
