@@ -10,19 +10,24 @@ function usage {
     fi
 
     cat <<EOF >&2
-    Usage is: $0 -d <device> -i <directory for image> -v <version>
-    Where:
-    -d  = Device to be used in /dev/<devicename> format (ex. /dev/sdb)
-    -h  = Help (this message)
-    -i  = Directory where the specified device's first partition will be mounted (ex. /mnt/image)
-    -v  = Version to be installed (6.[2|3] are the only valid options at this time)
+      Usage is: $0  -d <device> -i <directory for image> -v <version>
+      
+      Where:
+       -d  = Device to be used in /dev/<devicename> format (ex. /dev/sdb)
 
-    The specified device will be partitioned as below:
-    /dev/<device>1 = /    (18 GB)
-    /dev/<device>2 = swap (2  GB)
+       -h  = Help (this message)
 
-    / will be formatted as ext4
+       -i  = Directory where the specified device's first partition will be mounted (ex. /mnt/image).
+             If this directory doesn't exist, the script will prompt you to create it.
 
+       -v  = Version to be installed (6.[2|3] are the only valid options at this time)
+
+       A 20 GiB EBS volume will be partitioned as below.
+
+         /dev/<device>1 = /    (18   GB)
+         /dev/<device>2 = swap (2.5  GB)
+
+         / will be formatted as ext4
 EOF
 exit
 
