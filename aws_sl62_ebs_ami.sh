@@ -352,14 +352,6 @@ mounts:
  - [ xvdf, /media/ephemeral0, auto, "defaults,noexec,nosuid,nodev" ]
  - [ swap, none, swap, sw, "0", "0" ]
 
-bootcmd:
- - ec2-metadata --instance-id > /etc/hostname
- - hostname -F /etc/hostname
- - echo "127.0.1.1 `cat /etc/hostname`" >> /etc/hosts
-
-runcmd:
- - if ec2-metadata | grep instance-id > /dev/null; then ec2-metadata --instance-id > /etc/hostname; echo 127.0.0.1 `cat /etc/hostname` >> /etc/hosts; hostname -F /etc/hostname; service rsyslog restart; fi
-
 cloud_init_modules:
  - bootcmd
  - set_hostname
