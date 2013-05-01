@@ -7,6 +7,12 @@
 * package loadout is somewhat tailored to *my* current needs.  
 * cloud-init script remains a work in progress
 
-YMMV.  
+## Usage
 
+* boot an Amazon Linux AMI (or any linux AMI really) 
+    * add an extra 20GB EBS volume (going to snapshot this later)
+    * usually comes out as `/dev/sdd`, but make a note of what device it is mapped to
+* get the script onto the server: `curl -O https://raw.github.com/mostlygeek/aws-scripts/master/aws_sl62_ebs_ami.sh`
+* run it: `./awsL-sl62_ebs_ami -d /dev/sdd -i /mnt/image -v 6.3`
+* when it's completed, the EBS volume can be snapshotted and used to boot a new AMI
 
