@@ -190,7 +190,7 @@ echo "   CHROOT - Installing supplemental packages" >&2
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release rpmforge-release automake gcc git iotop \
 libcgroup ltrace nc net-snmp nss-pam-ldapd epel-release rpmforge-release \
-ruby rubygems screen svn tuned tuned-utils vim-minimal zsh \
+ruby rubygems screen svn tuned tuned-utils vim-minimal zsh yum-autoupdate \
 puppet-2.7.13 augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby libselinux-python \
 python-cheetah python-configobj python-pip python-virtualenv supervisor yum-conf-sl-other
 
@@ -330,7 +330,6 @@ cat > /etc/cloud/cloud.cfg << 'EOF'
 cloud_type: auto
 user: ec2-user
 disable_root: 1
-preserve_hostname: True
 
 cc_ready_cmd: ['/bin/true']
 
@@ -350,16 +349,16 @@ syslog_fix_perms: ~
 
 mounts:
  - [ LABEL=ROOT,/,ext4,"defaults,relatime" ]
- - [ ephemeral0, /media/ephemeral0, auto, "defaults,noexec,nosuid,nodev" ]
+ - [ xvdf, /media/ephemeral0, auto, "defaults,noexec,nosuid,nodev" ]
  - [ swap, none, swap, sw, "0", "0" ]
 
 bootcmd:
  - ec2-metadata --instance-id > /etc/hostname
- - hostname -b -F /etc/hostname
+ - hostname -F /etc/hostname
  - echo "127.0.1.1 `cat /etc/hostname`" >> /etc/hosts
 
 runcmd:
- - if ec2-metadata | grep instance-id > /dev/null; then ec2-metadata --instance-id > /etc/hostname; echo 127.0.0.1 `cat /etc/hostname` >> /etc/hosts; hostname -b -F /etc/hostname; service rsyslog restart; fi
+ - if ec2-metadata | grep instance-id > /dev/null; then ec2-metadata --instance-id > /etc/hostname; echo 127.0.0.1 `cat /etc/hostname` >> /etc/hosts; hostname -F /etc/hostname; service rsyslog restart; fi
 
 cloud_init_modules:
  - bootcmd
@@ -424,6 +423,10 @@ sed -i -e s/,vd}/,vd,xvd}/ /etc/tune-profiles/virtual-guest/ktune.sysconfig
 mv /etc/tune-profiles/default{,.orig}
 ln -sf /etc/tune-profiles/virtual-guest /etc/tune-profiles/default
 
+echo "   CHROOT - creating default user" >&2
+sed -i -e '/^#\ \%wheel.*NOPASSWD/s,^#,,;' /etc/sudoers
+useradd -d /home/ec2-user -G wheel -k /etc/skel -m -s /bin/bash -U ec2-user
+passwd -l ec2-user
 
 exit
 STAGE2EOF
