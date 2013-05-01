@@ -11,7 +11,7 @@ A simple script for creating an AMI image from scratch
 
 ### Steps for use
 
-1. Obtain a Linux based AMI in amazon (distro shouldn't matter, but amazon makes a nice one)
+1. Obtain a Linux based AMI in AWS (the distro shouldn't matter, but amazon makes a nice one)
 2. Boot the AMI
 3. Present a new 20 GB EBS volume to the host. Make a note of the device presented to the host OS. It will be needed when running the script.
 4. Obtain the script from https://raw.github.com/ckolos/aws-scripts/master/aws_sl62_ebs_ami.sh
