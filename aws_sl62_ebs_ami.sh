@@ -167,12 +167,11 @@ EOF
 
     # Be aware, this will not work for instance store AMIs
     cat > ${IMGLOC}/etc/fstab <<'EOF'
-/dev/xvde1     /         ext4    defaults,noatime  1    1
+LABEL=ROOT     /         ext4    defaults,noatime  1    1
 tmpfs          /dev/shm  tmpfs   defaults          0    0
 devpts         /dev/pts  devpts  gid=5,mode=620    0    0
 sysfs          /sys      sysfs   defaults          0    0
 proc           /proc     proc    defaults          0    0
-LABEL=ebs-swap none      swap    sw                0    0
 
 EOF
 
@@ -437,7 +436,7 @@ echo "  CHROOT - Creating AWS/Cloud Init fiddly bits" >&2
 # The following makes sure that the xvd* => sd* mapping stays in place on a 
 # non Amazon Linux host. Thanks to mostlygeek for figuring this out.
 cat > /sbin/ec2udev << 'EOF'; chmod 755 /sbin/ec2udev
-
+#!/bin/bash
 # Maintain consistent naming scheme with current EC2 instances
 if [ "$#" -ne 1 ] ; then
   echo "$0 <device>" >&2
