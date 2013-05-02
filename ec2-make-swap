@@ -2,7 +2,14 @@
 
 # 
 # Designed for EC2 instances, it will create a 2GB swap partition in 
-# /media/ephemeral0/swapfile if there is no swap 
+# /media/ephemeral0/swapfile if there is no swap. Only the m1.small
+# and c1.medium instances have swap partitions that are available
+# automatically. All other instance types will have no default swap
+# available. 
+#
+# For t1.small instances it will exist on the EBS volume under the
+# same location. For everything else other than m1.small and c1.medium
+# the swap will be a 2GB swap file.
 #
 
 BASE="/media/ephemeral0"
