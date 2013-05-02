@@ -193,11 +193,11 @@ yum -e 0 -q -y groupinstall Base Core > /dev/null 2>&1
 
 echo "  CHROOT - Installing supplemental packages" >&2
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
-java-1.6.0-openjdk epel-release rpmforge-release automake gcc git iotop \
-libcgroup ltrace nc net-snmp nss-pam-ldapd epel-release rpmforge-release \
-ruby rubygems screen svn tuned tuned-utils zsh puppet-2.7.13 augeas-libs \
-facter ruby-augeas ruby-shadow libselinux-ruby libselinux-python \
-python-cheetah python-configobj python-pip python-virtualenv supervisor > /dev/null 2>&1
+java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \
+net-snmp nss-pam-ldapd epel-release rpmforge-release ruby rubygems screen \
+svn tuned tuned-utils zsh puppet-2.7.13 augeas-libs facter ruby-augeas \
+ruby-shadow libselinux-ruby libselinux-python python-cheetah python-configobj \
+python-pip python-virtualenv supervisor > /dev/null 2>&1
 
 echo "  CHROOT - Installing cloud init" >&2
 yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd > /dev/null 2>&1
@@ -509,7 +509,7 @@ function cleanup() {
     echo "Cleaning up"
     # Reapply the mirrolist change
     sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
-    # Remove packages not needed post-installation
+        # Remove packages not needed post-installation
     yum -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages
     rm -rf ${IMGLOC}/root/mkgrub.sh
     rm -rf ${IMGLOC}/root/stage2.sh
