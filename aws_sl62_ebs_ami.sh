@@ -66,7 +66,7 @@ function make_filesystems {
    if test -b ${DEVICE}1; then
        mke2fs -q -t ext4 -L / -O extent -O sparse_super ${DEVICE}1
        tune2fs -c 0 ${DEVICE}1 > /dev/null 2>&1
-       tune2fs -L ROOT ${DEVICE}1
+       tune2fs -L ROOT ${DEVICE}1 > /dev/null 2>&1
    else
        echo "${DEVICE}1 not found" >&2
        exit
@@ -114,7 +114,6 @@ function stage1_install {
     fi
 
     # Need this first, so the yum commands below work
-
     cat > ${IMGLOC}/etc/yum.conf <<'EOF'
 [main]
 cachedir=/var/cache/yum/$basearch/$releasever
@@ -133,14 +132,13 @@ EOF
     # So at this point the gpg keys are in file:///${IMGLOC}/etc/pki/rpm-gpg but the repo files think they're in
     # file:///etc/pki/rpm-gpg/RPM-GPG-KEY-sl and because of that, installation will fail until we chroot. Sed that
     # out so this isn't an issue. We remove this later
-
     sed -i.bak -e s,file:///etc/pki/rpm-gpg/,file://${IMGLOC}/etc/pki/rpm-gpg/,g ${IMGLOC}/etc/yum.repos.d/sl.repo
 
     # Installs most of base
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror
+    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror > /dev/null 2>&1
 
     # Installs puppet yum repos and keys
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm
+    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm > /dev/null 2>&1
 
     # Overwrite exiting files (installed as deps in the commands above)
     cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
@@ -181,17 +179,19 @@ LABEL=ebs-swap none      swap    sw                0    0
 EOF
 
     # Let's make sure that the fastest mirrors are used for the yum commands
-
     sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
 
 
     # Create the shell script that will run in stage2 chroot
     echo "Creating stage2 script" >&2
+    
+    # Spacing is off here b/c heredoc
     cat > ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
-echo "   CHROOT - Installing base and core" >&2
+
+echo "  CHROOT - Installing base and core" >&2
 yum -e 0 -q -y groupinstall Base Core > /dev/null 2>&1
 
-echo "   CHROOT - Installing supplemental packages" >&2
+echo "  CHROOT - Installing supplemental packages" >&2
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release rpmforge-release automake gcc git iotop \
 libcgroup ltrace nc net-snmp nss-pam-ldapd epel-release rpmforge-release \
@@ -199,10 +199,10 @@ ruby rubygems screen svn tuned tuned-utils zsh puppet-2.7.13 augeas-libs \
 facter ruby-augeas ruby-shadow libselinux-ruby libselinux-python \
 python-cheetah python-configobj python-pip python-virtualenv supervisor > /dev/null 2>&1
 
-echo "   CHROOT - Installing cloud init" >&2
+echo "  CHROOT - Installing cloud init" >&2
 yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd > /dev/null 2>&1
 
-echo "   CHROOT - Installing API/AMI tools" >&2
+echo "  CHROOT - Installing API/AMI tools" >&2
 mkdir -p /opt/ec2/tools
 
 curl -s -o /tmp/ec2-api-tools.zip http://s3.amazonaws.com/ec2-downloads/ec2-api-tools.zip
@@ -219,6 +219,7 @@ curl -s -o /opt/ec2/tools/bin/ec2-metadata http://s3.amazonaws.com/ec2metadata/e
 chmod 755 /opt/ec2/tools/bin/ec2-metadata
 
 # Create profile configs for java and aws
+
 printf 'export EC2_HOME=/opt/ec2/tools\nexport PATH=$PATH:$EC2_HOME/bin\n' >> /etc/profile.d/aws.sh
 printf "export JAVA_HOME=/usr" >> /etc/profile.d/java.sh
 
@@ -252,7 +253,7 @@ done
 
 EOF
 
-echo "   CHROOT - Creating /boot/grub/menu.lst" >&2
+echo "  CHROOT - Creating /boot/grub/menu.lst" >&2
 
 bash /root/mkgrub.sh
 
@@ -328,7 +329,7 @@ chmod 755 /etc/init.d/ec2-get-ssh
 chkconfig --level 34 ec2-get-ssh on
 
 # This cloud.cfg doesn't seem to be working as I would expect. More testing is needed.
-echo "   CHROOT - Configuring cloud init" >&2
+echo "  CHROOT - Configuring cloud init" >&2
 mv /etc/cloud/cloud.cfg /root/cloud.cfg.orig
 cat > /etc/cloud/cloud.cfg << 'EOF'
 #cloud-config
@@ -393,19 +394,19 @@ cloud_final_modules:
 # vim:syntax=yaml
 EOF
 
-echo "   CHROOT - disable selinux and create rpm macros" >&2
+echo "  CHROOT - Disable selinux and create rpm macros" >&2
 sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux > /dev/null 2>&1
 echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
-echo "   CHROOT - Updating kernel tools" >&2
+echo "  CHROOT - Updating kernel tools" >&2
 yum -e0 -q -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools
 
-echo "   CHROOT - Removing unneeded firmware" >&2
+echo "  CHROOT - Removing unneeded firmware" >&2
 yum -e0 -y -q remove *-firmware
 # *hack*
 yum -e0 -y -q install kernel-firmware
 
-echo "   CHROOT - installing yum-autoupdates config" >&2
+echo "  CHROOT - Installing yum-autoupdates config" >&2
 cat > /etc/sysconfig/yum-autoupdate << 'EOF'
 ENABLED="true"
 SENDEMAIL="true"
@@ -421,7 +422,7 @@ USE_YUMSEC="true"
 DEBUG="false"
 EOF
 
-echo "   CHROOT - Setting ktune profile to virtual-guest" >&2
+echo "  CHROOT - Setting ktune profile to virtual-guest" >&2
 chkconfig --level 235 tuned on
 chkconfig --level 235 ktune on
 sed -i -e s/,vd}/,vd,xvd}/ /etc/tune-profiles/virtual-guest/ktune.sysconfig
@@ -431,13 +432,12 @@ ln -sf /etc/tune-profiles/virtual-guest /etc/tune-profiles/default
 echo "   CHROOT - creating default user" >&2
 sed -i -e '/^#\ \%wheel.*NOPASSWD/s,^#,,;' /etc/sudoers
 useradd -d /home/ec2-user -G wheel -k /etc/skel -m -s /bin/bash -U ec2-user
-passwd -l ec2-user
+passwd -l ec2-user > /dev/null 2>&1
 
 echo "   CHROOT - Creating AWS/Cloud Init fiddly bits" >&2
 
 # The following makes sure that the xvd* => sd* mapping stays in place on a 
 # non Amazon Linux host. Thanks to mostlygeek for figuring this out.
-
 cat > /sbin/ec2udev << 'EOF'
 
 # Maintain consistent naming scheme with current EC2 instances
@@ -495,18 +495,20 @@ function stage2_install {
     fi
 
     # Finally, chroot into the image
-        echo "Entering chroot" >&2
-        CWD=$(pwd)
-        cd ${IMGLOC} && \
-         chroot . /root/stage2.sh
-        echo "Exiting chroot" >&2
-        cd ${CWD}
+    echo "Entering chroot" >&2
+    CWD=$(pwd)
+    cd ${IMGLOC} && \
+    chroot . /root/stage2.sh
+    echo "Exiting chroot" >&2
+    cd ${CWD}
 
 }
 
 function cleanup() {
 
     echo "Cleaning up"
+    # Reapply the mirrolist change
+    sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
     # Remove packages not needed post-installation
     yum -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages
     rm -rf ${IMGLOC}/root/mkgrub.sh
