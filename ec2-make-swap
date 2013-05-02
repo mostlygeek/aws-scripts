@@ -12,6 +12,11 @@
 # the swap will be a 2GB swap file.
 #
 
+if [ $EUID -ne 0 ]; then
+    echo "ERROR: You must run this script as root"
+    exit 1
+fi
+
 BASE="/media/ephemeral0"
 SWAPFILE="$BASE/swapfile"
 
@@ -33,7 +38,7 @@ if [ -e $SWAPFILE ]; then
 fi
 
 if [ ! -d $BASE ]; then
-    echo "$BASE does not exist. No where to create swapfile"
+    echo "ERROR: $BASE does not exist. No where to create swapfile"
     exit 1
 fi
 
