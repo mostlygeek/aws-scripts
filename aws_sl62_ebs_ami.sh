@@ -55,8 +55,7 @@ function main {
 function create_partitions {
 
     parted $DEVICE --script mklabel msdos
-    parted -a optimal $DEVICE --script -- unit GB mkpart primary ext4 0 18
-    parted -a optimal $DEVICE --script -- unit GB mkpart primary linux-swap 18 -1
+    parted -a optimal $DEVICE --script -- unit GB mkpart primary ext4 0 -1
     parted $DEVICE --script -- set 1 boot
 
 }
@@ -71,8 +70,7 @@ function make_filesystems {
        echo "${DEVICE}1 not found" >&2
        exit
    fi
-   mkswap -L ebs-swap ${DEVICE}2 > /dev/null 2>&1
-
+   
 }
 
 function drive_prep {
@@ -355,7 +353,7 @@ syslog_fix_perms: ~
 
 mounts:
  - [ LABEL=ROOT,/,ext4,"defaults,relatime" ]
- - [ xvdf, /media/ephemeral0, auto, "defaults,noexec,nosuid,nodev" ]
+ - [ ephemeral0, /media/ephemeral0, auto, "defaults,noexec,nosuid,nodev" ]
  - [ swap, none, swap, sw, "0", "0" ]
 
 bootcmd:
@@ -438,7 +436,7 @@ echo "   CHROOT - Creating AWS/Cloud Init fiddly bits" >&2
 
 # The following makes sure that the xvd* => sd* mapping stays in place on a 
 # non Amazon Linux host. Thanks to mostlygeek for figuring this out.
-cat > /sbin/ec2udev << 'EOF'
+cat > /sbin/ec2udev << 'EOF'; chmod 755 /sbin/ec2udev
 
 # Maintain consistent naming scheme with current EC2 instances
 if [ "$#" -ne 1 ] ; then
@@ -454,7 +452,6 @@ fi
 
 exit
 EOF
-chmod 755 /sbin/ec2udev
 
 cat > /etc/udev/rules.d/51-ec2-hvm-devices.rules << 'EOF'
  
@@ -476,6 +473,54 @@ cat > /etc/udev/rules.d/51-ec2-hvm-devices.rules << 'EOF'
 KERNEL=="xvd*", PROGRAM="/sbin/ec2udev %k", SYMLINK+="%c"
 
 EOF
+
+echo "  CHROOT - Creating swap script" >&2
+cat > /sbin/ec2-make-swap << 'EOF'; chmod 755 /sbin/ec2-make-swap
+#!/bin/sh
+
+#
+# Designed for EC2 instances, it will create a 2GB swapfile in
+# /media/ephemeral0/swapfile if there is no swap
+#
+
+BASE="/media/ephemeral0"
+SWAPFILE="$BASE/swapfile"
+
+# Detect if a swap partition is already in use
+# m1.small and c1.medium AMIs have an ephemeral swap parition
+# automatically available
+SWAP=$(swapon -s | grep '^/' | wc -l)
+if [ $SWAP -gt 0 ]; then
+exit 0
+fi
+
+# If a swapfile already exists and is the proper size, use that instead
+# (again, on a reboot this may be the case
+if [ -e $SWAPFILE ]; then
+if [ $(stat --terse $SWAPFILE | awk '{print $2}') -eq 2147483648 ]; then
+echo "Enabling swapfile: $SWAPFILE" >&2
+        swapon $SWAPFILE
+        exit 0
+    fi
+fi
+
+if [ ! -d /media/ephemeral0 ]; then
+echo "/media/ephemeral0 does not exist. No where to create swapfile" >&2
+    exit 1
+fi
+
+echo "Creating 2GB Swap file at $SWAPFILE" >&2
+
+dd if=/dev/zero of=$SWAPFILE bs=4k count=524288
+mkswap $SWAPFILE
+swapon $SWAPFILE
+EOF
+
+cat >> /etc/rc.d/rc.local << 'EOF'
+/sbin/ec2-make-swap >> /var/log/ec2-make-swap.log 2>&1 &
+EOF
+
+
 
 STAGE2EOF
     chmod 700 ${IMGLOC}/root/stage2.sh
