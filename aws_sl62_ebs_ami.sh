@@ -24,8 +24,7 @@ function usage {
 
        A 20 GiB EBS volume will be partitioned as below.
 
-         /dev/<device>1 = /    (18   GB)
-         /dev/<device>2 = swap (2.5  GB)
+         /dev/<device>1 = /    (20   GB)
 
          / will be formatted as ext4
 EOF
@@ -55,8 +54,7 @@ function main {
 function create_partitions {
 
     parted $DEVICE --script mklabel msdos
-    parted -a optimal $DEVICE --script -- unit GB mkpart primary ext4 0 18
-    parted -a optimal $DEVICE --script -- unit GB mkpart primary linux-swap 18 -1
+    parted -a optimal $DEVICE --script -- unit GB mkpart primary ext4 0 -1
     parted $DEVICE --script -- set 1 boot
 
 }
