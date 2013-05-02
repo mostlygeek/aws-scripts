@@ -255,7 +255,7 @@ echo "  CHROOT - Creating /boot/grub/menu.lst" >&2
 
 bash /root/mkgrub.sh
 
-echo "   CHROOT - Tweaking sshd config" >&2
+echo "  CHROOT - Tweaking sshd config" >&2
 printf "UseDNS no\nPermitRootLogin without-password" >> /etc/ssh/sshd_config
 
 cat > /etc/init.d/ec2-get-ssh << 'EOF'
@@ -427,12 +427,12 @@ sed -i -e s/,vd}/,vd,xvd}/ /etc/tune-profiles/virtual-guest/ktune.sysconfig
 mv /etc/tune-profiles/default{,.orig}
 ln -sf /etc/tune-profiles/virtual-guest /etc/tune-profiles/default
 
-echo "   CHROOT - creating default user" >&2
+echo "  CHROOT - creating default user" >&2
 sed -i -e '/^#\ \%wheel.*NOPASSWD/s,^#,,;' /etc/sudoers
 useradd -d /home/ec2-user -G wheel -k /etc/skel -m -s /bin/bash -U ec2-user
 passwd -l ec2-user > /dev/null 2>&1
 
-echo "   CHROOT - Creating AWS/Cloud Init fiddly bits" >&2
+echo "  CHROOT - Creating AWS/Cloud Init fiddly bits" >&2
 
 # The following makes sure that the xvd* => sd* mapping stays in place on a 
 # non Amazon Linux host. Thanks to mostlygeek for figuring this out.
