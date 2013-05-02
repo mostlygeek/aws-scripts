@@ -25,9 +25,8 @@ if [ -e $SWAPFILE ]; then
     fi
 fi
 
-
-if [ ! -d /media/ephemeral0 ]; then
-    echo "/media/ephemeral0 does not exist. No where to create swapfile"
+if [ ! -d $BASE ]; then
+    echo "$BASE does not exist. No where to create swapfile"
     exit 1
 fi
 
@@ -36,4 +35,3 @@ echo "Creating 2GB Swap file at $SWAPFILE"
 dd if=/dev/zero of=$SWAPFILE bs=4k count=524288
 mkswap $SWAPFILE
 swapon $SWAPFILE
-
