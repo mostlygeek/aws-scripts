@@ -450,7 +450,7 @@ exit
 EOF
 
 cat > /etc/udev/rules.d/51-ec2-hvm-devices.rules << 'EOF'
-#!/bin/bash
+
 # Copyright (C) 2006-2012 Amazon.com, Inc. or its affiliates.
 # All Rights Reserved.
 #
