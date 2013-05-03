@@ -52,7 +52,7 @@ function main {
 function make_filesystems {
 
    if test -b ${DEVICE}; then
-       mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}
+       mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super -F ${DEVICE}
        tune2fs -c 0 ${DEVICE} > /dev/null 2>&1
    else
        echo "${DEVICE} not found" >&2
