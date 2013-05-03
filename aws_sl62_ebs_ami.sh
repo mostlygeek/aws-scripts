@@ -22,12 +22,9 @@ function usage {
 
        -v  = Version to be installed (6.[2|3] are the only valid options at this time)
 
-       A 20 GiB EBS volume will be partitioned as below.
+      All space on the presented volume will be used!
 
-         /dev/<device>1 = /    (18   GB)
-         /dev/<device>2 = swap (2.5  GB)
-
-         / will be formatted as ext4
+      / will be formatted as ext4
 EOF
 exit
 
@@ -453,7 +450,7 @@ exit
 EOF
 
 cat > /etc/udev/rules.d/51-ec2-hvm-devices.rules << 'EOF'
- 
+#!/bin/bash
 # Copyright (C) 2006-2012 Amazon.com, Inc. or its affiliates.
 # All Rights Reserved.
 #
