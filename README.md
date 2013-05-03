@@ -1,25 +1,29 @@
-### aws\_sl62\_ebs\_ami.sh
+### 
+aws\_sl6\_partioned\_ami.sh
+aws\_sl6\_non\_partioned\_ami.sh
 
-A simple script for creating an AMI image from scratch
+Simple scripts for creating an AMI image from scratch
 * assumes you are running this from an existing AMI in the AWS cloud  
 * only creates SL 6.2/3 AMI's  
 * assumes that you have already presented an ebs volume to the instance  
 * package loadout is somewhat tailored to *my* current needs.  
 * cloud-init script remains a work in progress
+* The 'partitioned' script creates a partitioned ebs volume
+* The 'non-partitioned' script creates a 'blob' or non-paritioned AMI. Use this one for m1.small instances.
 
 ### Steps for use
 
 1. Obtain a Linux based AMI in AWS (the distro shouldn't matter, but amazon makes a nice one)
 2. Boot the AMI
 3. Present a new EBS volume to the host. Make a note of the device presented to the host OS. It will be needed when running the script.
-4. Obtain the script from https://raw.github.com/ckolos/aws-scripts/master/aws_sl62_ebs_ami.sh
+4. Obtain the script from https://raw.github.com/ckolos/aws-scripts/master/aws\_sl6\_partioned\_ami.sh or  https://raw.github.com/ckolos/aws-scripts/master/aws\_sl6\_non\_partioned\_ami.sh
 5. Run the script as shown below 
 
 ### Script Usage
 
       This script is invoked as: 
       
-      aws_sl62_ebs_ami.sh -d <device> -i <directory for image> -v <version>
+      aws_sl6_partitioned_ami.sh -d <device> -i <directory for image> -v <version>
       
       Where:
        -d  = Device to be used in /dev/<devicename> format (ex. /dev/sdb)
@@ -41,7 +45,7 @@ A simple script for creating an AMI image from scratch
 3. Modify the following values:
   1. Name: whatever you wish
   2. Architechture: x86\_64
-  3. Kernel ID: Up to you, but if using the ebs\_ami script, be sure to select an pv-grub/hd00 image (currently aki-b4aa75dd in us-east-1)
+  3. Kernel ID: Up to you, but if using the partitioned\_ami script, be sure to select an pv-grub/hd00 image (currently aki-b4aa75dd in us-east-1). Non partitioned? aki-88aa75e1.
   4. Description: again, your call
   5. Root Device Name: This is critical. If using the ebs\_ami script, change this FROM /dev/sda1 TO /dev/sda (i.e. remove the '1')
   6. Ramdisk ID: can be left at default
