@@ -75,7 +75,7 @@ function drive_prep {
     create_partitions
     make_filesystems
     mount ${DEVICE}1 $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
-    if mount | grep -q ${IMGLOC}; then
+    if mount | grep -q ${DEVICE}1; then
         mkdir -p $IMGLOC/{dev,etc,proc,sys}
         mkdir -p $IMGLOC/var/{cache,log,lock,lib/rpm}
         for i in console null zero urandom
