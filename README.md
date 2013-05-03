@@ -47,7 +47,8 @@ Simple scripts for creating an AMI image from scratch
   2. Architechture: x86\_64
   3. Kernel ID: Up to you, but if using the partitioned\_ami script, be sure to select an pv-grub/hd00 image (currently aki-b4aa75dd in us-east-1). Non partitioned? aki-88aa75e1.
   4. Description: again, your call
-  5. Root Device Name: This is critical. If using the ebs\_ami script, change this FROM /dev/sda1 TO /dev/sda (i.e. remove the '1')
+  5. Root Device Name: If you are using the paritioned AMI, this is *critical*. Change this FROM /dev/sda1 TO /dev/sda (i.e. remove the '1').
+     If you're using the non-partitioned AMI script, *LEAVE THIS ALONE*
   6. Ramdisk ID: can be left at default
   7. If ephemeral storage is wanted, click on 'Instance Store Volumes' in the 'Block Device Mapping' and select however many instances you wish.
 4. Click 'Yes, Create'
