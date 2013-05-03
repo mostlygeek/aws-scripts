@@ -232,11 +232,11 @@ function do_entry {
     VER=${KERN#/boot/vmlinuz-}
     printf "\n\ntitle Scientific Linux ($VER)
 root (hd0,0)
-kernel $KERN ro root=/dev/xvde1 rootfstype=ext4 rd_NO_PLYMOUTH selinux=0 console=hvc0 \
+kernel $KERN ro root=LABEL=ROOT rootfstype=ext4 rd_NO_PLYMOUTH selinux=0 console=hvc0 \
 loglvl=all sync_console console_to_ring earlyprintk=xen nomodeset rd_NO_FSTAB \
-rd_NO_LUKS rd_NO_LVM rd_NO_MD rd_NO_DM LANG=en_US.UTF-8 \
-SYSFONT=latarcyrheb-sun16 KEYBOARDTYPE=pc KEYTABLE=us crashkernel=auto rhgb \
-max_loop=64 rdinfo biosdevname=0 rdloaddriver=xen_blkfront rdloaddriver=ext4\n \
+rd_NO_LUKS rd_NO_LVM rd_NO_MD LANG=C SYSFONT=latarcyrheb-sun16 KEYBOARDTYPE=pc \
+KEYTABLE=us crashkernel=auto rhgb max_loop=64 rdinfo biosdevname=0 \
+rdloaddriver=xen_blkfront rdloaddriver=ext4 xen_blkfront.sda_is_xvda=1\n \
 initrd /boot/initramfs-${VER}.img\n" >> /boot/grub/menu.lst
 }
 
