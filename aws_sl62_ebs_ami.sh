@@ -63,9 +63,9 @@ function create_partitions {
 function make_filesystems {
 
    if test -b ${DEVICE}1; then
-       mke2fs -q -t ext4 -L / -O extent -O sparse_super ${DEVICE}1
-       tune2fs -c 0 ${DEVICE}1 > /dev/null 2>&1
-       tune2fs -L ROOT ${DEVICE}1 > /dev/null 2>&1
+       mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}1
+       tune2fs -c 0 ${DEVICE} > /dev/null 2>&1
+       
    else
        echo "${DEVICE}1 not found" >&2
        exit
@@ -190,11 +190,11 @@ yum -e 0 -q -y groupinstall Base Core > /dev/null 2>&1
 
 echo "  CHROOT - Installing supplemental packages" >&2
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
-java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \
-net-snmp nss-pam-ldapd epel-release rpmforge-release ruby rubygems screen \
-svn tuned tuned-utils zsh puppet-2.7.13 augeas-libs facter ruby-augeas \
-ruby-shadow libselinux-ruby libselinux-python python-cheetah python-configobj \
-python-pip python-virtualenv supervisor > /dev/null 2>&1
+java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \ 
+net-snmp nss-pam-ldapd epel-release ruby rubygems screen svn tuned tuned-utils \
+zsh puppet augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby \
+libselinux-python python-cheetah python-configobj python-pip python-virtualenv \
+supervisor > /dev/null 2>&1
 
 echo "  CHROOT - Installing cloud init" >&2
 yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd > /dev/null 2>&1

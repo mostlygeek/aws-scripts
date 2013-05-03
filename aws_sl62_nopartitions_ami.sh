@@ -181,8 +181,8 @@ yum -e 0 -q -y groupinstall Base Core > /dev/null 2>&1
 echo "  CHROOT - Installing supplemental packages" >&2
 yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \
-net-snmp nss-pam-ldapd epel-release rpmforge-release ruby rubygems screen \
-svn tuned tuned-utils zsh puppet-2.7.13 augeas-libs facter ruby-augeas \
+net-snmp nss-pam-ldapd epel-release ruby rubygems screen \
+svn tuned tuned-utils zsh puppet augeas-libs facter ruby-augeas \
 ruby-shadow libselinux-ruby libselinux-python python-cheetah python-configobj \
 python-pip python-virtualenv supervisor > /dev/null 2>&1
 
