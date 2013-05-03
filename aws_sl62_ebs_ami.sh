@@ -75,7 +75,7 @@ function drive_prep {
     create_partitions
     make_filesystems
     mount ${DEVICE}1 $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
-    if mount | grep -q ${DEVICE}1; then
+    if mount | grep -q $IMGLOC; then
         mkdir -p $IMGLOC/{dev,etc,proc,sys}
         mkdir -p $IMGLOC/var/{cache,log,lock,lib/rpm}
         for i in console null zero urandom
@@ -627,6 +627,9 @@ while getopts :d:hi:v:u ARGS; do
                     exit;
                 fi
             fi
+
+            # trim trailing slash if it exists
+            IMGLOC=${IMGLOC%/}
             ;;
         h)
             usage
@@ -669,3 +672,4 @@ test -z "$DEVICE" && { echo "DEVICE is not set. Exiting" >&2; usage; }
 test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting" >&2; usage; }
 test -z "$VERSION" && { echo "VERSION is not set. Exiting" >&2; usage; }
 main
+
