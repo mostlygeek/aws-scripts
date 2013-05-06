@@ -32,7 +32,7 @@ exit
 
 function install_prereqs {
 
-    yum -e0 -q -y install e2fsprogs unzip MAKEDEV > /dev/null 2>&1
+    $YUM -y install e2fsprogs unzip MAKEDEV $YUM_REDIRECT
 
 }
 
@@ -130,10 +130,10 @@ EOF
     sed -i.bak -e s,file:///etc/pki/rpm-gpg/,file://${IMGLOC}/etc/pki/rpm-gpg/,g ${IMGLOC}/etc/yum.repos.d/sl.repo
 
     # Installs most of base
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror > /dev/null 2>&1
+    $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror $YUM_REDIRECT
 
     # Installs puppet yum repos and keys
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm > /dev/null 2>&1
+    $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm $YUM_REDIRECT
 
     # Overwrite exiting files (installed as deps in the commands above)
     cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
@@ -183,18 +183,18 @@ EOF
     cat > ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
 
 echo "  CHROOT - Installing base and core" >&2
-yum -e 0 -q -y groupinstall Base Core > /dev/null 2>&1
+$YUM -y groupinstall Base Core > $YUM_REDIRECT
 
 echo "  CHROOT - Installing supplemental packages" >&2
-yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
+$YUM -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \
 net-snmp nss-pam-ldapd epel-release ruby rubygems screen svn tuned tuned-utils \
 zsh puppet augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby \
 libselinux-python python-cheetah python-configobj python-pip python-virtualenv \
-supervisor > /dev/null 2>&1
+supervisor $YUM_REDIRECT
 
 echo "  CHROOT - Installing cloud init" >&2
-yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd > /dev/null 2>&1
+$YUM -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd $YUM_REDIRECT
 
 echo "  CHROOT - Installing API/AMI tools" >&2
 mkdir -p /opt/ec2/tools
@@ -393,12 +393,12 @@ sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux > /dev/null 2>&1
 echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
 echo "  CHROOT - Updating kernel tools" >&2
-yum -e0 -q -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools
+$YUM -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools $YUM_REDIRECT
 
 echo "  CHROOT - Removing unneeded firmware" >&2
-yum -e0 -y -q remove *-firmware
+$YUM -q remove *-firmware $YUM_REDIRECT
 # *hack*
-yum -e0 -y -q install kernel-firmware
+$YUM -y install kernel-firmware $YUM_REDIRECT
 
 echo "  CHROOT - Installing yum-autoupdates config" >&2
 cat > /etc/sysconfig/yum-autoupdate << 'EOF'
@@ -551,7 +551,7 @@ function cleanup() {
     # Reapply the mirrolist change
     sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
         # Remove packages not needed post-installation
-    yum -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages
+    $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages $YUM_REDIRECT
     rm -rf ${IMGLOC}/root/mkgrub.sh
     rm -rf ${IMGLOC}/root/stage2.sh
     rm -rf ${IMGLOC}/root/.bash_history
@@ -599,7 +599,7 @@ fi
 IMGLOC=
 DEVICE=
 VERSION=
-while getopts :d:hi:v:u ARGS; do
+while getopts :d:hi:v:V ARGS; do
     case $ARGS in
         d)
             if  test -L /sys/block/${OPTARG#/dev/}; then
@@ -661,6 +661,9 @@ while getopts :d:hi:v:u ARGS; do
                  usage
             fi
             ;;
+        V)
+            VERBOSE=1
+            ;;
 
         \?)
             echo "Invalid option!" >&2
@@ -671,5 +674,12 @@ done
 test -z "$DEVICE" && { echo "DEVICE is not set. Exiting" >&2; usage; }
 test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting" >&2; usage; }
 test -z "$VERSION" && { echo "VERSION is not set. Exiting" >&2; usage; }
+if [ $VERBOSE -eq 1 ]; then
+    YUM="yum "
+    YUM_REDIRECT=" >&2"
+else
+    YUM="yum -e 0 -q "
+    YUM_REDIRECT=" > /dev/null 2>&1"
+fi
 main
 
