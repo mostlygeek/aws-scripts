@@ -20,7 +20,7 @@ function usage {
        -i  = Directory where the specified device's first partition will be mounted (ex. /mnt/image).
              If this directory doesn't exist, the script will prompt you to create it.
 
-       -v  = Version to be installed (6.[2|3] are the only valid options at this time)
+       -v  = Version to be installed (6.[2|3|4] are the only valid options at this time)
 
        -V  = Verbose mode
 
@@ -85,7 +85,7 @@ function drive_prep {
         mount ${DEVICE}1 $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
     fi
 
-    if mount | grep -q $IMGLOC; then
+    if mount | grep -q ${IMGLOC}; then
         mkdir -p $IMGLOC/{dev,etc,proc,sys}
         mkdir -p $IMGLOC/var/{cache,log,lock,lib/rpm}
 
@@ -184,10 +184,8 @@ sysfs          /sys      sysfs   defaults          0    0
 proc           /proc     proc    defaults          0    0
 
 EOF
-
     # Let's make sure that the fastest mirrors are used for the yum commands
     sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
-
 
     # Create the shell script that will run in stage2 chroot
     echo "Creating stage2 script" >&2
@@ -200,7 +198,7 @@ EOF
     cat >> ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
 
 echo "  CHROOT - Installing base and core" >&2
-eval $YUM -y groupinstall Base Core > $YUM_REDIRECT
+eval $YUM -y groupinstall Base Core $YUM_REDIRECT
 
 echo "  CHROOT - Installing supplemental packages" >&2
 eval $YUM -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
@@ -410,12 +408,12 @@ sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux > /dev/null 2>&1
 echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
 echo "  CHROOT - Updating kernel tools" >&2
-$YUM -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools $YUM_REDIRECT
+eval $YUM -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools $YUM_REDIRECT
 
 echo "  CHROOT - Removing unneeded firmware" >&2
-$YUM -y remove *-firmware $YUM_REDIRECT
+eval $YUM -y remove *-firmware $YUM_REDIRECT
 # *hack*
-$YUM -y install kernel-firmware $YUM_REDIRECT
+eval $YUM -y install kernel-firmware $YUM_REDIRECT
 
 echo "  CHROOT - Installing yum-autoupdates config" >&2
 cat > /etc/sysconfig/yum-autoupdate << 'EOF'
@@ -567,8 +565,8 @@ function cleanup() {
     echo "Cleaning up"
     # Reapply the mirrolist change
     sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
-        # Remove packages not needed post-installation
-    $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages $YUM_REDIRECT
+    # Remove packages not needed post-installation
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages $YUM_REDIRECT
     rm -rf ${IMGLOC}/root/mkgrub.sh
     rm -rf ${IMGLOC}/root/stage2.sh
     rm -rf ${IMGLOC}/root/.bash_history
@@ -705,4 +703,3 @@ else
     YUM_REDIRECT=" > /dev/null 2>&1"
 fi
 main
-

@@ -4,7 +4,7 @@ aws\_sl6\_non\_partioned\_ami.sh
 
 Simple scripts for creating an AMI image from scratch
 * assumes you are running this from an existing AMI in the AWS cloud  
-* only creates SL 6.2/3 AMI's  
+* only creates SL 6.2/3/4 AMI's  
 * assumes that you have already presented an ebs volume to the instance  
 * package loadout is somewhat tailored to *my* current needs.  
 * cloud-init script remains a work in progress
@@ -33,7 +33,9 @@ Simple scripts for creating an AMI image from scratch
        -i  = Directory where the specified device's first partition will be mounted (ex. /mnt/image).
              If this directory doesn't exist, the script will prompt you to create it.
 
-       -v  = Version to be installed (6.[2|3] are the only valid options at this time)
+       -v  = Version to be installed (6.[2|3|4] are the only valid options at this time)
+
+       -V  = Verbose mode
 
       All space on the presented volume will be used!
       

@@ -20,7 +20,9 @@ function usage {
        -i  = Directory where the specified device's first partition will be mounted (ex. /mnt/image).
              If this directory doesn't exist, the script will prompt you to create it.
 
-       -v  = Version to be installed (6.[2|3] are the only valid options at this time)
+       -v  = Version to be installed (6.[2|3|4] are the only valid options at this time)
+
+       -V  = Verbose mode
 
       All space on the presented volume will be used!
 
@@ -32,7 +34,7 @@ exit
 
 function install_prereqs {
 
-    yum -e0 -q -y install e2fsprogs unzip MAKEDEV > /dev/null 2>&1
+    eval $YUM -y install e2fsprogs unzip MAKEDEV $YUM_REDIRECT
 
 }
 
@@ -51,8 +53,12 @@ function main {
 
 function make_filesystems {
 
-   if test -b ${DEVICE}; then
-       mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super -F ${DEVICE}
+    if test -b ${DEVICE}; then
+        if test $VERBOSE -eq 1; then
+            mke2fs -t ext4 -L ROOT -O extent -O sparse_super -F ${DEVICE}
+        else
+            mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super -F ${DEVICE}
+        fi
        tune2fs -c 0 ${DEVICE} > /dev/null 2>&1
    else
        echo "${DEVICE} not found" >&2
@@ -64,22 +70,31 @@ function make_filesystems {
 function drive_prep {
 
     make_filesystems
-    mount ${DEVICE} $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
+    if test $VERBOSE -eq 1; then
+        mount ${DEVICE} $IMGLOC || { echo "Error mounting the spec'd volume." >&2; exit; }
+    else
+        mount ${DEVICE} $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
+    fi
+
     if mount | grep -q ${IMGLOC}; then
         mkdir -p $IMGLOC/{dev,etc,proc,sys}
         mkdir -p $IMGLOC/var/{cache,log,lock,lib/rpm}
+
         for i in console null zero urandom
         do
             /sbin/MAKEDEV -d $IMGLOC/dev -x $i
         done
+
         for i in /{dev{,/pts,/shm},proc,sys}
         do
             mount -o bind $i ${IMGLOC}$i
         done
+
     else
         echo "Problem mounting device $DEVICE... Bailing out" >&2
         exit
     fi
+
     rpm --rebuilddb --root=${IMGLOC}
 
 }
@@ -90,12 +105,11 @@ function stage1_install {
     echo "Installing base packages for chroot" >&2
 
     # Need to know which version of the OS we're installing
-    echo $RELEASERPM | grep -q rpm
-    if [ $? -eq 1 ]; then
+    if echo $RELEASERPM | grep -q rpm; then
+        $RELEASERPM
+    else
         echo "Bad version passed" >&2
         usage
-    else
-        $RELEASERPM
     fi
 
     # Need this first, so the yum commands below work
@@ -120,10 +134,10 @@ EOF
     sed -i.bak -e s,file:///etc/pki/rpm-gpg/,file://${IMGLOC}/etc/pki/rpm-gpg/,g ${IMGLOC}/etc/yum.repos.d/sl.repo
 
     # Installs most of base
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror > /dev/null 2>&1
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror $YUM_REDIRECT
 
     # Installs puppet yum repos and keys
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm > /dev/null 2>&1
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm $YUM_REDIRECT
 
     # Overwrite exiting files (installed as deps in the commands above)
     cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
@@ -161,30 +175,33 @@ sysfs          /sys      sysfs   defaults          0    0
 proc           /proc     proc    defaults          0    0
 
 EOF
-
     # Let's make sure that the fastest mirrors are used for the yum commands
     sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
 
-
     # Create the shell script that will run in stage2 chroot
     echo "Creating stage2 script" >&2
+
+
+    # needed to preserve the proper verbose/non-verbose behavior we wanted
+    echo export YUM=\"$YUM\" >  ${IMGLOC}/root/stage2.sh
+    echo export YUM_REDIRECT=\"$YUM_REDIRECT\" >>  ${IMGLOC}/root/stage2.sh
     
     # Spacing is off here b/c heredoc
-    cat > ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
+    cat >> ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
 
 echo "  CHROOT - Installing base and core" >&2
-yum -e 0 -q -y groupinstall Base Core > /dev/null 2>&1
+eval $YUM -y groupinstall Base Core $YUM_REDIRECT
 
 echo "  CHROOT - Installing supplemental packages" >&2
-yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
+eval $YUM -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \
-net-snmp nss-pam-ldapd epel-release ruby rubygems screen \
-svn tuned tuned-utils zsh puppet augeas-libs facter ruby-augeas \
-ruby-shadow libselinux-ruby libselinux-python python-cheetah python-configobj \
-python-pip python-virtualenv supervisor > /dev/null 2>&1
+net-snmp nss-pam-ldapd epel-release ruby rubygems screen svn tuned tuned-utils \
+zsh puppet augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby \
+libselinux-python python-cheetah python-configobj python-pip python-virtualenv \
+supervisor $YUM_REDIRECT
 
 echo "  CHROOT - Installing cloud init" >&2
-yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd > /dev/null 2>&1
+eval $YUM -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd $YUM_REDIRECT
 
 echo "  CHROOT - Installing API/AMI tools" >&2
 mkdir -p /opt/ec2/tools
@@ -383,12 +400,12 @@ sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux > /dev/null 2>&1
 echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
 echo "  CHROOT - Updating kernel tools" >&2
-yum -e0 -q -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools
+eval $YUM -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools $YUM_REDIRECT
 
 echo "  CHROOT - Removing unneeded firmware" >&2
-yum -e0 -y -q remove *-firmware
+eval $YUM -y remove *-firmware $YUM_REDIRECT
 # *hack*
-yum -e0 -y -q install kernel-firmware
+eval $YUM -y install kernel-firmware $YUM_REDIRECT
 
 echo "  CHROOT - Installing yum-autoupdates config" >&2
 cat > /etc/sysconfig/yum-autoupdate << 'EOF'
@@ -540,8 +557,8 @@ function cleanup() {
     echo "Cleaning up"
     # Reapply the mirrolist change
     sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
-        # Remove packages not needed post-installation
-    yum -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages
+    # Remove packages not needed post-installation
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages $YUM_REDIRECT
     rm -rf ${IMGLOC}/root/mkgrub.sh
     rm -rf ${IMGLOC}/root/stage2.sh
     rm -rf ${IMGLOC}/root/.bash_history
@@ -571,6 +588,9 @@ function version_check {
     63)
         RELEASERPM="rpm -ivh --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.3/x86_64/os/Packages/sl-release-6.3-1.x86_64.rpm"
         ;;
+    64)
+        RELEASERPM="rpm -ivh --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.4/x86_64/os/Packages/sl-release-6.4-1.x86_64.rpm"
+        ;;
     *)
         echo "foo"
         ;;
@@ -589,7 +609,7 @@ fi
 IMGLOC=
 DEVICE=
 VERSION=
-while getopts :d:hi:v:u ARGS; do
+while getopts :d:hi:v:V ARGS; do
     case $ARGS in
         d)
             if  test -L /sys/block/${OPTARG#/dev/}; then
@@ -617,6 +637,7 @@ while getopts :d:hi:v:u ARGS; do
                     exit;
                 fi
             fi
+
             # trim trailing slash if it exists
             IMGLOC=${IMGLOC%/}
             ;;
@@ -636,6 +657,9 @@ while getopts :d:hi:v:u ARGS; do
                     3)
                         VERSION=63
                         ;;
+                    4)
+                        VERSION=64
+                        ;;
                     *)
                         echo "Unsupported Version!" >&2
                         usage
@@ -650,6 +674,9 @@ while getopts :d:hi:v:u ARGS; do
                  usage
             fi
             ;;
+        V)
+            VERBOSE=1
+            ;;
 
         \?)
             echo "Invalid option!" >&2
@@ -660,4 +687,11 @@ done
 test -z "$DEVICE" && { echo "DEVICE is not set. Exiting" >&2; usage; }
 test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting" >&2; usage; }
 test -z "$VERSION" && { echo "VERSION is not set. Exiting" >&2; usage; }
+if [ $VERBOSE -eq 1 ]; then
+    YUM="yum "
+    YUM_REDIRECT=" >&2"
+else
+    YUM="yum -e 0 -q "
+    YUM_REDIRECT=" > /dev/null 2>&1"
+fi
 main
