@@ -34,7 +34,7 @@ exit
 
 function install_prereqs {
 
-    eval $YUM -y install e2fsprogs unzip MAKEDEV $YUM_REDIRECT
+    eval $YUM install e2fsprogs unzip MAKEDEV $YUM_REDIRECT
 
 }
 
@@ -134,10 +134,10 @@ EOF
     sed -i.bak -e s,file:///etc/pki/rpm-gpg/,file://${IMGLOC}/etc/pki/rpm-gpg/,g ${IMGLOC}/etc/yum.repos.d/sl.repo
 
     # Installs most of base
-    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror $YUM_REDIRECT
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror $YUM_REDIRECT
 
     # Installs puppet yum repos and keys
-    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm $YUM_REDIRECT
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm $YUM_REDIRECT
 
     # Overwrite exiting files (installed as deps in the commands above)
     cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
@@ -190,18 +190,20 @@ EOF
     cat >> ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
 
 echo "  CHROOT - Installing base and core" >&2
-eval $YUM -y groupinstall Base Core $YUM_REDIRECT
+eval $YUM groupinstall Base Core $YUM_REDIRECT
 
 echo "  CHROOT - Installing supplemental packages" >&2
-eval $YUM -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
+eval $YUM --enablerepo=puppetlabs-products,puppetlabs-deps install \
 java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \
 net-snmp nss-pam-ldapd epel-release ruby rubygems screen svn tuned tuned-utils \
 zsh puppet augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby \
-libselinux-python python-cheetah python-configobj python-pip python-virtualenv \
-supervisor $YUM_REDIRECT
+libselinux-python python-cheetah python-configobj $YUM_REDIRECT
+
+echo "  CHROOT - Installing epel only packages" >&1
+eval $YUM --enablerepo=epel install supervisor python-pip python-virtalenv $YUM_REDIRECT
 
 echo "  CHROOT - Installing cloud init" >&2
-eval $YUM -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd $YUM_REDIRECT
+eval $YUM --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd $YUM_REDIRECT
 
 echo "  CHROOT - Installing API/AMI tools" >&2
 mkdir -p /opt/ec2/tools
@@ -400,12 +402,12 @@ sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux > /dev/null 2>&1
 echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
 echo "  CHROOT - Updating kernel tools" >&2
-eval $YUM -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools $YUM_REDIRECT
+eval $YUM --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools $YUM_REDIRECT
 
 echo "  CHROOT - Removing unneeded firmware" >&2
-eval $YUM -y remove *-firmware $YUM_REDIRECT
+eval $YUM remove *-firmware $YUM_REDIRECT
 # *hack*
-eval $YUM -y install kernel-firmware $YUM_REDIRECT
+eval $YUM install kernel-firmware $YUM_REDIRECT
 
 echo "  CHROOT - Installing yum-autoupdates config" >&2
 cat > /etc/sysconfig/yum-autoupdate << 'EOF'
@@ -558,7 +560,7 @@ function cleanup() {
     # Reapply the mirrolist change
     sed -i -e 's,baseurl,#baseurl,g' -e 's,^#mirrorlist,mirrorlist,g' ${IMGLOC}/etc/yum.repos.d/sl.repo
     # Remove packages not needed post-installation
-    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y clean packages $YUM_REDIRECT
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} clean packages $YUM_REDIRECT
     rm -rf ${IMGLOC}/root/mkgrub.sh
     rm -rf ${IMGLOC}/root/stage2.sh
     rm -rf ${IMGLOC}/root/.bash_history
@@ -688,10 +690,10 @@ test -z "$DEVICE" && { echo "DEVICE is not set. Exiting" >&2; usage; }
 test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting" >&2; usage; }
 test -z "$VERSION" && { echo "VERSION is not set. Exiting" >&2; usage; }
 if [ $VERBOSE -eq 1 ]; then
-    YUM="yum "
+    YUM="yum -y "
     YUM_REDIRECT=" >&2"
 else
-    YUM="yum -e 0 -q "
+    YUM="yum -e 0 -q -y "
     YUM_REDIRECT=" > /dev/null 2>&1"
 fi
 main
