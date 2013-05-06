@@ -365,12 +365,12 @@ runcmd:
  - INSTANCE_ID=$(curl --silent http://169.254.169.254/latest/meta-data/instance-id)
  - echo $INSTANCE_ID > /etc/hostname
  - hostname --file /etc/hostname
- - echo "127.0.1.1 $INSTANCE_ID" >> /tmp/boot-hostname
+ - echo "127.0.0.1 $INSTANCE_ID" >> /tmp/boot-hostname
  -
- - if grep --fixed-strings --quiet "127.0.1.1" /etc/hosts; then
- -     sed --in-place=bak "s/^127.0.1.1 .*$/127.0.1.1 $INSTANCE_ID/" /etc/hosts
+ - if grep --fixed-strings --quiet "127.0.0.1" /etc/hosts; then
+ -     sed --in-place=bak "s/^127.0.0.1 .*$/127.0.0.1 $INSTANCE_ID localhost $INSTANCE_ID.localdomain localhost.localdomain/" /etc/hosts
  - else
- -     echo "127.0.1.1 $INSTANCE_ID" >> /etc/hosts
+ -     echo "127.0.0.1 $INSTANCE_ID localhost $INSTANCE_ID.localdomain localhost.localdomain" >> /etc/hosts
  - fi
 
 cloud_init_modules:
