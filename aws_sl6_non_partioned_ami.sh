@@ -222,7 +222,7 @@ function do_entry {
     KERN=$1
     VER=${KERN#/boot/vmlinuz-}
     printf "\n\ntitle Scientific Linux ($VER)
-root (hd0,0)
+root (hd0)
 kernel $KERN ro root=LABEL=ROOT rootfstype=ext4 rd_NO_PLYMOUTH selinux=0 console=hvc0 \
 loglvl=all sync_console console_to_ring earlyprintk=xen nomodeset rd_NO_FSTAB \
 rd_NO_LUKS rd_NO_LVM rd_NO_MD LANG=C SYSFONT=latarcyrheb-sun16 KEYBOARDTYPE=pc \
