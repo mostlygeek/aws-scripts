@@ -22,6 +22,8 @@ function usage {
 
        -v  = Version to be installed (6.[2|3] are the only valid options at this time)
 
+       -V  = Verbose mode
+
       All space on the presented volume will be used!
 
       / will be formatted as ext4
@@ -32,7 +34,7 @@ exit
 
 function install_prereqs {
 
-    $YUM -y install e2fsprogs unzip MAKEDEV $YUM_REDIRECT
+    eval $YUM -y install e2fsprogs unzip MAKEDEV $YUM_REDIRECT
 
 }
 
@@ -59,14 +61,17 @@ function create_partitions {
 
 function make_filesystems {
 
-   if test -b ${DEVICE}1; then
-       mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}1
+    if test -b ${DEVICE}1; then
+        if test $VERBOSE -eq 1; then
+            mke2fs -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}1
+        else
+            mke2fs -q -t ext4 -L ROOT -O extent -O sparse_super ${DEVICE}1
+        fi
        tune2fs -c 0 ${DEVICE} > /dev/null 2>&1
-       
-   else
+    else
        echo "${DEVICE}1 not found" >&2
        exit
-   fi
+    fi
    
 }
 
@@ -74,22 +79,31 @@ function drive_prep {
 
     create_partitions
     make_filesystems
-    mount ${DEVICE}1 $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
+    if test $VERBOSE -eq 1; then 
+        mount ${DEVICE}1 $IMGLOC || { echo "Error mounting the spec'd volume." >&2; exit; }
+    else
+        mount ${DEVICE}1 $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
+    fi
+
     if mount | grep -q $IMGLOC; then
         mkdir -p $IMGLOC/{dev,etc,proc,sys}
         mkdir -p $IMGLOC/var/{cache,log,lock,lib/rpm}
+
         for i in console null zero urandom
         do
             /sbin/MAKEDEV -d $IMGLOC/dev -x $i
         done
+
         for i in /{dev{,/pts,/shm},proc,sys}
         do
             mount -o bind $i ${IMGLOC}$i
         done
+
     else
         echo "Problem mounting device $DEVICE... Bailing out" >&2
         exit
     fi
+
     rpm --rebuilddb --root=${IMGLOC}
 
 }
@@ -100,12 +114,11 @@ function stage1_install {
     echo "Installing base packages for chroot" >&2
 
     # Need to know which version of the OS we're installing
-    echo $RELEASERPM | grep -q rpm
-    if [ $? -eq 1 ]; then
+    if echo $RELEASERPM | grep -q rpm; then
+        $RELEASERPM
+    else
         echo "Bad version passed" >&2
         usage
-    else
-        $RELEASERPM
     fi
 
     # Need this first, so the yum commands below work
@@ -130,10 +143,10 @@ EOF
     sed -i.bak -e s,file:///etc/pki/rpm-gpg/,file://${IMGLOC}/etc/pki/rpm-gpg/,g ${IMGLOC}/etc/yum.repos.d/sl.repo
 
     # Installs most of base
-    $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror $YUM_REDIRECT
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror $YUM_REDIRECT
 
     # Installs puppet yum repos and keys
-    $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm $YUM_REDIRECT
+    eval $YUM -c ${IMGLOC}/etc/yum.conf --installroot=${IMGLOC} -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm $YUM_REDIRECT
 
     # Overwrite exiting files (installed as deps in the commands above)
     cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
@@ -178,15 +191,19 @@ EOF
 
     # Create the shell script that will run in stage2 chroot
     echo "Creating stage2 script" >&2
+
+    # needed to preserve the proper verbose/non-verbose behavior we wanted
+    echo export YUM=\"$YUM\" >  ${IMGLOC}/root/stage2.sh
+    echo export YUM_REDIRECT=\"$YUM_REDIRECT\" >>  ${IMGLOC}/root/stage2.sh
     
     # Spacing is off here b/c heredoc
-    cat > ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
+    cat >> ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
 
 echo "  CHROOT - Installing base and core" >&2
-$YUM -y groupinstall Base Core > $YUM_REDIRECT
+eval $YUM -y groupinstall Base Core > $YUM_REDIRECT
 
 echo "  CHROOT - Installing supplemental packages" >&2
-$YUM -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
+eval $YUM -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \
 net-snmp nss-pam-ldapd epel-release ruby rubygems screen svn tuned tuned-utils \
 zsh puppet augeas-libs facter ruby-augeas ruby-shadow libselinux-ruby \
@@ -194,7 +211,7 @@ libselinux-python python-cheetah python-configobj python-pip python-virtualenv \
 supervisor $YUM_REDIRECT
 
 echo "  CHROOT - Installing cloud init" >&2
-$YUM -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd $YUM_REDIRECT
+eval $YUM -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd $YUM_REDIRECT
 
 echo "  CHROOT - Installing API/AMI tools" >&2
 mkdir -p /opt/ec2/tools
@@ -396,7 +413,7 @@ echo "  CHROOT - Updating kernel tools" >&2
 $YUM -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools $YUM_REDIRECT
 
 echo "  CHROOT - Removing unneeded firmware" >&2
-$YUM -q remove *-firmware $YUM_REDIRECT
+$YUM -y remove *-firmware $YUM_REDIRECT
 # *hack*
 $YUM -y install kernel-firmware $YUM_REDIRECT
 
@@ -581,6 +598,9 @@ function version_check {
     63)
         RELEASERPM="rpm -ivh --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.3/x86_64/os/Packages/sl-release-6.3-1.x86_64.rpm"
         ;;
+    64)
+        RELEASERPM="rpm -ivh --root=${IMGLOC}/ --nodeps http://ftp.scientificlinux.org/linux/scientific/6.4/x86_64/os/Packages/sl-release-6.4-1.x86_64.rpm"
+        ;;
     *)
         echo "foo"
         ;;
@@ -646,6 +666,9 @@ while getopts :d:hi:v:V ARGS; do
                         ;;
                     3)
                         VERSION=63
+                        ;;
+                    4)
+                        VERSION=64
                         ;;
                     *)
                         echo "Unsupported Version!" >&2
