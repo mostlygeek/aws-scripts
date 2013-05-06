@@ -32,7 +32,7 @@ exit
 
 function install_prereqs {
 
-    yum -e0 -q -y install e2fsprogs unzip MAKEDEV > /dev/null 2>&1
+    yum -e0 -y install e2fsprogs unzip MAKEDEV > /dev/null 2>&1
 
 }
 
@@ -63,6 +63,7 @@ function make_filesystems {
 
 function drive_prep {
 
+    echo "Creating Filesystems"
     make_filesystems
     mount ${DEVICE} $IMGLOC > /dev/null 2>&1 || { echo "Error mounting the spec'd volume." >&2; exit; }
     if mount | grep -q ${IMGLOC}; then
@@ -120,10 +121,10 @@ EOF
     sed -i.bak -e s,file:///etc/pki/rpm-gpg/,file://${IMGLOC}/etc/pki/rpm-gpg/,g ${IMGLOC}/etc/yum.repos.d/sl.repo
 
     # Installs most of base
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror > /dev/null 2>&1
+    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -y install rpm-build yum openssh-server dhclient yum-plugin-fastestmirror 2>&1
 
     # Installs puppet yum repos and keys
-    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -q -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm > /dev/null 2>&1
+    yum -c ${IMGLOC}/etc/yum.conf -e 0 --installroot=${IMGLOC} -y install http://yum.puppetlabs.com/el/6/products/x86_64/puppetlabs-release-6-6.noarch.rpm > /dev/null 2>&1
 
     # Overwrite exiting files (installed as deps in the commands above)
     cat > ${IMGLOC}/etc/sysconfig/network-scripts/ifcfg-eth0 <<'EOF'
@@ -173,10 +174,10 @@ EOF
     cat > ${IMGLOC}/root/stage2.sh << 'STAGE2EOF'
 
 echo "  CHROOT - Installing base and core" >&2
-yum -e 0 -q -y groupinstall Base Core > /dev/null 2>&1
+yum -e 0 -y groupinstall Base Core 2>&1
 
 echo "  CHROOT - Installing supplemental packages" >&2
-yum -e 0 -q -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
+yum -e 0 -y install --enablerepo=puppetlabs-products,puppetlabs-deps \
 java-1.6.0-openjdk epel-release automake gcc git iotop libcgroup ltrace nc \
 net-snmp nss-pam-ldapd epel-release ruby rubygems screen \
 svn tuned tuned-utils zsh puppet augeas-libs facter ruby-augeas \
@@ -184,7 +185,7 @@ ruby-shadow libselinux-ruby libselinux-python python-cheetah python-configobj \
 python-pip python-virtualenv supervisor > /dev/null 2>&1
 
 echo "  CHROOT - Installing cloud init" >&2
-yum -e 0 -q -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd > /dev/null 2>&1
+yum -e 0 -y --enablerepo=epel install libyaml PyYAML cloud-init python-boto s3cmd 2>&1
 
 echo "  CHROOT - Installing API/AMI tools" >&2
 mkdir -p /opt/ec2/tools
@@ -383,12 +384,12 @@ sed -i -e 's,=enforcing,=disabled,' /etc/sysconfig/selinux > /dev/null 2>&1
 echo '%_query_all_fmt %%{name} %%{version}-%%{release} %%{arch} %%{size}' >> /etc/rpm/macros
 
 echo "  CHROOT - Updating kernel tools" >&2
-yum -e0 -q -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools
+yum -e0 -y --enablerepo=sl-fastbugs install dracut dracut-kernel module-init-tools
 
 echo "  CHROOT - Removing unneeded firmware" >&2
 yum -e0 -y -q remove *-firmware
 # *hack*
-yum -e0 -y -q install kernel-firmware
+yum -e0 -y install kernel-firmware
 
 echo "  CHROOT - Installing yum-autoupdates config" >&2
 cat > /etc/sysconfig/yum-autoupdate << 'EOF'
