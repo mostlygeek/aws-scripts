@@ -611,6 +611,7 @@ fi
 IMGLOC=
 DEVICE=
 VERSION=
+VERBOSE=0
 while getopts :d:hi:v:V ARGS; do
     case $ARGS in
         d)
@@ -689,6 +690,7 @@ done
 test -z "$DEVICE" && { echo "DEVICE is not set. Exiting" >&2; usage; }
 test -z "$IMGLOC" && { echo "IMGLOC is not set. Exiting" >&2; usage; }
 test -z "$VERSION" && { echo "VERSION is not set. Exiting" >&2; usage; }
+
 if [ $VERBOSE -eq 1 ]; then
     YUM="yum -y "
     YUM_REDIRECT=" >&2"

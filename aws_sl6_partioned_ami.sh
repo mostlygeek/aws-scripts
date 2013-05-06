@@ -619,6 +619,7 @@ fi
 IMGLOC=
 DEVICE=
 VERSION=
+VERBOSE=0
 while getopts :d:hi:v:V ARGS; do
     case $ARGS in
         d)
